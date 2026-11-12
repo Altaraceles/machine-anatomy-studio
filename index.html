@@ -1,0 +1,1007 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Machine Anatomy Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config={corePlugins:{preflight:false}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* Layout: full-height studio. Top bar (machine tabs) / 3D viewport with floating control dock / right engineering sidebar. Stacks on phones. */
+:root{
+  --bg:#0a1017; --panel:#0f1720; --panel2:#142030; --line:#223244;
+  --fg:#d6e2ee; --muted:#7e93a8; --cyan:#35d6e8; --amber:#f5a524; --red:#ff4d5a; --green:#4ade80;
+  --display:'Space Grotesk',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:13px;overflow:hidden;
+  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+#root{height:100%}
+.app{height:100%;display:flex;flex-direction:column;min-height:0}
+.topbar{display:flex;align-items:center;gap:16px;padding:10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.brand{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.brand i{width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+.tab{font-family:var(--display);font-weight:600;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.tab:hover{color:var(--fg);border-color:#35506a}
+.tab[aria-selected=true]{color:#04222a;background:var(--cyan);border-color:var(--cyan)}
+.main{flex:1;display:flex;min-height:0}
+.stage{position:relative;flex:1;min-width:0;min-height:0;background:radial-gradient(ellipse at 50% 35%,#16222f 0%,#0a1017 70%)}
+.stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;white-space:nowrap;font-family:var(--mono);font-size:11px;line-height:1;
+  padding:5px 8px 5px 7px;border-radius:4px;background:rgba(10,16,23,.86);border:1px solid #2c445a;color:var(--fg);
+  display:flex;align-items:center;gap:6px;transition:opacity .25s,border-color .15s,background .15s;will-change:transform,opacity}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.tag:hover{border-color:var(--cyan)}
+.tag.sel{background:var(--cyan);color:#04222a;border-color:var(--cyan)}
+.tag.sel::before{background:#04222a;box-shadow:none}
+.tag.fault{border-color:var(--red);color:#ffd5d8}
+.tag.fault::before{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dock{position:absolute;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(15,23,32,.88);backdrop-filter:blur(6px)}
+.grp{display:flex;align-items:center;gap:8px;padding:0 6px;border-right:1px solid var(--line)}
+.grp:last-child{border-right:0}
+.btn{font-family:var(--body);font-weight:600;font-size:12px;padding:7px 11px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--cyan)}
+.btn.on{background:rgba(53,214,232,.16);border-color:var(--cyan);color:var(--cyan)}
+.btn.amber{background:rgba(245,165,36,.14);border-color:var(--amber);color:var(--amber)}
+.btn:focus-visible,.tab:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.val{font-family:var(--mono);font-size:11px;color:var(--fg);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{accent-color:var(--cyan);width:96px}
+select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:12px;font-family:var(--body);max-width:210px}
+.hint{position:absolute;top:10px;left:12px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;pointer-events:none}
+.status{position:absolute;top:10px;right:12px;display:flex;gap:6px;pointer-events:none}
+.chip{font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:99px;border:1px solid var(--line);background:rgba(10,16,23,.8);color:var(--muted)}
+.chip.run{color:var(--green);border-color:#1f5a37}
+.chip.bad{color:#ffd5d8;border-color:var(--red);background:rgba(255,77,90,.18)}
+.side{width:360px;flex:none;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;display:flex;flex-direction:column}
+.sec{padding:16px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
+.eyebrow.amber{color:var(--amber)} .eyebrow.red{color:var(--red)}
+h2{font-family:var(--display);font-size:20px;font-weight:700;margin:4px 0 2px;text-wrap:balance}
+h3{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+p{margin:0;line-height:1.55;color:#bccbda;font-size:13px}
+.specs{width:100%;border-collapse:collapse;font-size:12px}
+.specs td{padding:5px 0;border-bottom:1px dashed #1d2b3a;vertical-align:top}
+.specs td:first-child{color:var(--muted);padding-right:10px}
+.specs td:last-child{font-family:var(--mono);text-align:right;color:var(--fg)}
+ol.steps{margin:0;padding-left:18px;color:#bccbda;line-height:1.55;font-size:13px;display:flex;flex-direction:column;gap:4px}
+ul.sym{margin:0;padding-left:18px;color:#ffd5d8;line-height:1.5;display:flex;flex-direction:column;gap:3px}
+.tour{background:linear-gradient(180deg,rgba(245,165,36,.09),transparent)}
+.dots{display:flex;gap:4px;margin:10px 0}
+.dots i{flex:1;height:3px;border-radius:2px;background:var(--line)} .dots i.d{background:var(--amber)}
+.row{display:flex;gap:8px;margin-top:12px}
+.partlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pl{font-size:11px;padding:4px 8px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.pl:hover{color:var(--fg);border-color:var(--cyan)}
+@media (max-width:860px){
+  body{overflow:auto} html,body,#root{height:auto;min-height:100%}
+  .app{height:auto}
+  .main{flex-direction:column}
+  .stage{height:74vh;min-height:460px;flex:none}
+  .side{width:auto;border-left:0;border-top:1px solid var(--line);overflow:visible}
+  .dock{left:8px;right:8px;padding:6px}
+  .grp{border-right:0;padding:0 2px}
+  input[type=range]{width:80px}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){.tag{transition:none}}
+</style>
+<div id="root"></div>
+<script>
+/* ============================================================
+   CONFIG — add a machine by adding an entry here and a builder
+   in BUILDERS below. Part `tag` is a local 3D anchor point,
+   `explode` is the offset (scene units) at 100% explode.
+   ============================================================ */
+const CONFIG = {
+  motor: {
+    name: "3-Phase Induction Motor", short: "Induction Motor",
+    camera: { pos: [6.5, 3.6, 7.5], target: [0.4, 0, 0], dist: 11 },
+    sim: { label: "Load", unit: "% slip-load" },
+    parts: {
+      frame:    { name: "Finned Outer Frame", cat: "Housing · Thermal", tag: [-0.9, 1.8, 0.2], explode: [0, 2.6, 0], casing: true,
+        principle: "A cast-iron shell holds the stator and carries heat from the core to the air. The radial fins multiply surface area, and the shaft-mounted fan blows air along them (TEFC cooling).",
+        fn: "Mechanical support, enclosure protection and heat rejection.",
+        specs: [["Material", "Cast iron GG-25"], ["Frame size", "IEC 132M"], ["Protection", "IP55"], ["Cooling", "IC411 (TEFC)"], ["Fins", "36 radial"]] },
+      endbells: { name: "End Bells", cat: "Housing · Bearings", tag: [1.7, 1.25, 0.4], explode: [2.2, 0, 0], casing: true,
+        principle: "Machined end shields locate the bearings so the rotor stays centred in the stator bore. The air gap is only 0.5 mm in real machines, so alignment matters.",
+        fn: "Bearing support, rotor alignment and sealing of the frame ends.",
+        specs: [["Bearings", "6208-2RS / 6206-2RS"], ["Material", "Cast iron"], ["Air-gap held", "0.5 mm"], ["Seals", "V-ring + grease"]] },
+      stator:   { name: "Laminated Stator Core", cat: "Magnetic circuit", tag: [0, 1.38, 0.5], explode: [0, 0, -2.2],
+        principle: "Thin silicon-steel sheets, insulated from each other, stack into a ring with slots. Lamination breaks up eddy-current loops, so core loss stays low at 50 Hz.",
+        fn: "Carries the rotating magnetic flux from the windings across the air gap.",
+        specs: [["Steel", "M470-50A, 0.5 mm"], ["Stack length", "200 mm"], ["Slots", "36"], ["Flux density", "~1.5 T peak"]] },
+      windings: { name: "3-Phase Copper Windings", cat: "Electrical · Stator", tag: [1.3, 0.98, 0], explode: [0, 0, -1.1],
+        principle: "Three coil groups sit 120° apart in space and are fed by currents 120° apart in time. Together they build a magnetic field that rotates at synchronous speed Ns = 120·f / P.",
+        fn: "Converts the three-phase supply into a rotating magnetic field.",
+        specs: [["Rated power", "7.5 kW"], ["Voltage", "400 V Δ"], ["Current", "14.8 A"], ["Poles", "4 (1500 rpm sync)"], ["Insulation", "Class F, 155 °C"]] },
+      rotor:    { name: "Squirrel-Cage Rotor", cat: "Electrical · Rotor", tag: [0.2, 0.0, 0.95], explode: [0, 0, 2.2],
+        principle: "Aluminium bars short-circuited by end rings sit in a laminated core. The rotating field cuts the bars and induces currents, and the interaction of those currents with the field produces torque. The rotor always runs a little slower than the field (slip).",
+        fn: "Produces shaft torque by induction with no brushes or slip rings.",
+        specs: [["Bars", "28 cast aluminium"], ["Rated slip", "3.5 %"], ["Rated speed", "1448 rpm"], ["Rated torque", "49.5 N·m"]] },
+      shaft:    { name: "Shaft", cat: "Mechanical · Output", tag: [3.0, 0.2, 0], explode: [0, -2.4, 0],
+        principle: "A forged steel shaft carries the rotor torque out through the drive-end bearing. A key transmits torque to the coupling or pulley.",
+        fn: "Transmits mechanical power to the load.",
+        specs: [["Material", "C45 steel"], ["Diameter", "38 mm"], ["Key", "10 × 8 mm"], ["Max radial load", "~1.9 kN"]] },
+      fan:      { name: "Rear Cooling Fan", cat: "Thermal · Mechanical", tag: [-2.55, 0.0, 1.15], explode: [-2.0, 0, 0],
+        principle: "A fan on the non-drive end pushes air over the finned frame. Airflow scales with shaft speed, so cooling falls when the motor is slowed by a drive.",
+        fn: "Forces air along the frame fins to remove winding and core heat.",
+        specs: [["Blades", "8 radial"], ["Diameter", "Ø 240 mm"], ["Material", "Glass-filled PA66"], ["Airflow", "~0.12 m³/s"]] },
+      terminal: { name: "Terminal Box", cat: "Electrical · Interface", tag: [0.35, 2.35, 0], explode: [0, 3.6, 0],
+        principle: "Six winding ends (U1 V1 W1 / U2 V2 W2) land on a terminal block. Links in star or delta set the voltage the motor can run on.",
+        fn: "Safe connection point for the three-phase supply and earth.",
+        specs: [["Terminals", "6 × M5 + PE"], ["Entry", "M25 gland"], ["Connection", "Delta @ 400 V"], ["Protection", "IP55"]] }
+    },
+    tour: [
+      { part: "terminal", title: "Power arrives", text: "Three phase lines L1, L2 and L3 enter the terminal box and connect to the winding ends." },
+      { part: "windings", title: "A rotating field is born", text: "Each phase peaks in turn. Watch the glow travel around the bore: that is the rotating magnetic field." },
+      { part: "stator",   title: "Flux gets a path", text: "The laminated core guides the flux across the air gap with low loss." },
+      { part: "rotor",    title: "Induction makes torque", text: "The field cuts the rotor bars, induces current, and the rotor chases the field at slightly lower speed." },
+      { part: "shaft",    title: "Torque leaves", text: "The shaft carries the mechanical output to the load." },
+      { part: "fan",      title: "Waste heat is removed", text: "The shaft-driven fan pushes air through the fins." },
+      { part: "frame",    title: "Heat leaves the machine", text: "The frame fins hand the heat to the air stream. Losses of about 8 to 10 % of input power end up here." }
+    ],
+    faults: {
+      overheat: { name: "Overheated Stator Winding", part: "windings",
+        symptoms: ["Burning smell and winding hot to touch (>155 °C)", "Thermal relay trips under load", "Phase currents unbalanced, motor hums and loses speed", "Insulation resistance dropping toward 1 MΩ"],
+        repair: ["Isolate and lock out the supply.", "Check for overload, blocked airflow or low supply voltage.", "Megger test each phase to earth and between phases.", "Rewind or replace the stator if insulation is damaged.", "Re-check the overload relay setting before restart."] },
+      fan: { name: "Failed Cooling Fan", part: "fan",
+        symptoms: ["Fan stationary or blades broken", "Frame temperature rises steadily, even at light load", "Overload relay trips after some minutes", "Rattling or grinding from the fan cover"],
+        repair: ["Isolate the supply and let the motor cool.", "Remove the fan cover and inspect the fan and its retaining clip.", "Replace the fan; never run the motor without it.", "Clear dust from the fins and the cover grille.", "Run at load and confirm frame temperature stabilises."] }
+    }
+  },
+
+  pcb: {
+    name: "Microcontroller Development Board", short: "Dev Board (PCB)",
+    camera: { pos: [0.5, 6.2, 5.6], target: [0, 0, 0], dist: 8.5 },
+    sim: { label: "Activity", unit: "% packet rate" },
+    parts: {
+      board: { name: "FR4 PCB Substrate", cat: "Substrate", tag: [2.6, 0.06, 1.35], explode: [0, -1.0, 0], casing: true,
+        principle: "Woven glass cloth soaked in flame-retardant epoxy (FR4) forms a rigid insulator. Copper layers are etched on it and covered with solder mask.",
+        fn: "Mechanical base and electrical insulation for all components and traces.",
+        specs: [["Material", "FR4, Tg 150 °C"], ["Thickness", "1.6 mm"], ["Layers", "4 (sig / gnd / pwr / sig)"], ["Copper", "1 oz (35 µm)"], ["Size", "60 × 36 mm"]] },
+      mcu: { name: "Microcontroller IC", cat: "Digital · Logic", tag: [0.8, 0.5, 0.0], explode: [0, 1.6, 0],
+        principle: "A 32-bit CPU core with flash, SRAM and peripherals on one silicon die inside a QFP package. It fetches instructions, runs them, and drives or reads pins.",
+        fn: "Runs firmware and controls peripherals.",
+        specs: [["Core", "32-bit RISC, 168 MHz"], ["Package", "LQFP-64"], ["Supply", "3.3 V ±5 %"], ["Flash / RAM", "512 kB / 128 kB"], ["Current", "~45 mA active"]] },
+      reg: { name: "Linear Voltage Regulator", cat: "Power", tag: [-1.25, 0.4, 0.7], explode: [0, 1.4, 0],
+        principle: "A pass transistor acts as a variable resistor. A feedback loop adjusts it so the output stays at 3.3 V while input changes. The extra voltage is dissipated as heat: P = (Vin − Vout) × I.",
+        fn: "Turns the 5 V USB rail into a clean 3.3 V logic rail.",
+        specs: [["Output", "3.3 V ±2 %"], ["Max current", "800 mA"], ["Dropout", "1.1 V"], ["Package", "SOT-223"], ["Dissipation", "~0.8 W at 500 mA"]] },
+      caps: { name: "Electrolytic Capacitors", cat: "Power · Filter", tag: [-1.9, 0.7, -0.95], explode: [0, 2.0, 0],
+        principle: "Two foil plates and an electrolyte store charge. They supply current during load spikes and smooth ripple on the supply rails.",
+        fn: "Input and output filtering for the regulator.",
+        specs: [["Input cap", "100 µF / 16 V"], ["Output cap", "47 µF / 10 V"], ["ESR", "< 0.3 Ω"], ["Life", "2000 h @ 105 °C"]] },
+      inductor: { name: "Power Inductor", cat: "Power · Filter", tag: [-0.45, 0.45, 0.7], explode: [0, 1.0, 0.4],
+        principle: "A coil on a ferrite core stores energy in a magnetic field and resists changes in current. Here it forms an LC filter with the capacitor to block high-frequency noise from the 3.3 V rail.",
+        fn: "Filters switching noise before the MCU supply pin.",
+        specs: [["Inductance", "10 µH"], ["Saturation", "1.2 A"], ["DCR", "180 mΩ"], ["Type", "Shielded ferrite SMD"]] },
+      usb: { name: "USB-C Power Port", cat: "Interface · Power", tag: [-2.9, 0.5, 0], explode: [-1.6, 0.3, 0],
+        principle: "A reversible 24-pin connector. Two 5.1 kΩ resistors on the CC pins tell the host it may supply 5 V. VBUS feeds the board.",
+        fn: "Brings in 5 V power and the data lines.",
+        specs: [["VBUS", "5 V, up to 1.5 A"], ["Data", "USB 2.0 full speed"], ["CC pull-down", "5.1 kΩ ×2"], ["Shell", "Stainless steel"]] },
+      reset: { name: "Reset Tactile Switch", cat: "Input", tag: [2.2, 0.5, -1.2], explode: [0.8, 1.2, 0],
+        principle: "A metal dome snaps down to join two contacts. This pulls the MCU reset pin low and restarts the processor.",
+        fn: "Manual hardware restart.",
+        specs: [["Contact", "SPST momentary"], ["Force", "160 gf"], ["Life", "100 000 cycles"], ["Size", "6 × 6 mm"]] },
+      traces: { name: "Glowing Copper Traces", cat: "Interconnect", tag: [1.85, 0.12, 0.85], explode: [0, 0.5, 0],
+        principle: "Etched copper tracks carry current. Width sets current capacity and length sets resistance and delay. Power tracks are wider than signal tracks.",
+        fn: "Routes power from the USB port, through the regulator, to the MCU, and signals to the pins.",
+        specs: [["Power width", "0.6 mm"], ["Signal width", "0.2 mm"], ["Plating", "ENIG finish"], ["Current", "~1 A for 0.6 mm"]] }
+    },
+    tour: [
+      { part: "usb",      title: "5 V enters", text: "VBUS from the USB-C port is the only power source." },
+      { part: "traces",   title: "Power route", text: "Wide copper tracks carry current toward the regulator. Amber packets are 5 V." },
+      { part: "caps",     title: "Input filtering", text: "The big capacitor absorbs ripple and spikes from the cable." },
+      { part: "reg",      title: "Down to 3.3 V", text: "The regulator drops 5 V to 3.3 V. Packets turn cyan after this stage." },
+      { part: "inductor", title: "Noise filtering", text: "The inductor and output capacitor remove high-frequency noise." },
+      { part: "mcu",      title: "Logic is powered", text: "The microcontroller boots and starts running firmware." },
+      { part: "reset",    title: "Manual restart", text: "Pressing the switch pulls the reset pin low." }
+    ],
+    faults: {
+      cap: { name: "Blown Filter Capacitor", part: "caps",
+        symptoms: ["Bulged or vented capacitor top, brown residue", "Random MCU resets, brown-out under load", "High ripple on 5 V and 3.3 V rails (scope >200 mV)", "Board warm near the regulator"],
+        repair: ["Unplug USB and discharge the board.", "Inspect visually and measure ESR in circuit.", "Desolder and replace with the same value and voltage rating, observing polarity.", "Check the regulator, which may have been stressed by the ripple.", "Measure ripple again after repair."] },
+      reg: { name: "Regulator Thermal Shutdown", part: "reg",
+        symptoms: ["Regulator too hot to touch", "3.3 V rail collapses after seconds, then returns", "MCU stops or restarts in a cycle", "Worse when peripherals draw high current"],
+        repair: ["Unplug the board.", "Check the 3.3 V rail for a short (power off, ohm-meter).", "Reduce load or move heavy loads to a separate supply.", "Improve copper pour under the tab for heat spreading.", "Replace the regulator if its output is out of tolerance."] }
+    }
+  },
+
+  transformer: {
+    name: "Single-Phase Step-Down Transformer", short: "Step-Down Transformer",
+    camera: { pos: [6.5, 3.2, 9.5], target: [0, 0, 0], dist: 12.5 },
+    sim: { label: "Load", unit: "% load" },
+    parts: {
+      tank: { name: "Protective Outer Tank", cat: "Housing", tag: [-1.8, 1.4, 1.0], explode: [0, 0, 3.8], casing: true,
+        principle: "A welded steel tank holds the core and winding in insulating oil. The oil insulates and carries heat by natural convection to the radiator. Shown with the front wall cut away.",
+        fn: "Mechanical protection, oil containment and heat transfer.",
+        specs: [["Material", "Mild steel 3 mm"], ["Fluid", "Mineral oil (ONAN)"], ["Oil volume", "~180 L"], ["Protection", "IP54"]] },
+      core: { name: "Laminated Silicon-Steel Core", cat: "Magnetic circuit", tag: [0, 1.45, 0.4], explode: [0, 0, -1.8],
+        principle: "Grain-oriented silicon steel sheets form a closed loop. Alternating flux set by the primary flows around the loop and links the secondary. Lamination reduces eddy-current loss.",
+        fn: "Provides a low-reluctance path to link the two windings.",
+        specs: [["Steel", "CRGO M4, 0.27 mm"], ["Flux density", "1.6 T peak"], ["Core loss", "~1.1 W/kg"], ["Type", "Core, two-leg"]] },
+      primary: { name: "High-Voltage Primary Winding", cat: "Electrical · HV", tag: [-0.9, 1.0, 0.65], explode: [-1.4, 0.4, 2.4],
+        principle: "Many turns of thin copper wire. The AC supply drives a magnetising current that sets up alternating flux in the core.",
+        fn: "Takes the 11 kV input and creates the core flux.",
+        specs: [["Rated voltage", "11 kV"], ["Turns", "1100 (ratio 27.5 : 1)"], ["Current", "4.5 A"], ["Conductor", "Round Cu, enamel"], ["Insulation", "Class A, paper-oil"]] },
+      secondary: { name: "Low-Voltage Secondary Winding", cat: "Electrical · LV", tag: [0.9, 1.0, 0.65], explode: [1.4, 0.4, 2.4],
+        principle: "Fewer turns of thicker wire. The changing flux induces a voltage by Faraday's law: Vs / Vp = Ns / Np. Lower voltage means higher current.",
+        fn: "Delivers 400 V to the load.",
+        specs: [["Rated voltage", "400 V"], ["Turns", "40"], ["Current", "124 A"], ["Conductor", "Strip / thick Cu"], ["Rating", "50 kVA, 50 Hz"]] },
+      bushings: { name: "Ceramic Insulator Bushings", cat: "Insulation · Terminals", tag: [-0.9, 2.7, 0.5], explode: [0, 2.2, 3.8],
+        principle: "Ribbed porcelain lets a conductor pass through the earthed tank cover. The ribs lengthen the surface path so creepage and flashover are avoided in rain.",
+        fn: "Insulated connection of HV and LV leads through the tank.",
+        specs: [["HV bushing", "17.5 kV class"], ["LV bushing", "1 kV class"], ["Material", "Glazed porcelain"], ["Creepage", "≥ 25 mm/kV"]] },
+      radiator: { name: "Cooling Radiator Fins", cat: "Thermal", tag: [2.6, 0.9, 0.2], explode: [3.4, 0, 3.8], 
+        principle: "Hot oil rises into the top header, flows down through thin fin panels cooled by the outside air, and returns at the bottom. Natural circulation needs no pump.",
+        fn: "Rejects winding and core losses to the air.",
+        specs: [["Panels", "12 steel fins"], ["Dissipation", "~1.3 kW"], ["Cooling", "ONAN"], ["Top-oil rise", "≤ 55 K"]] }
+    },
+    tour: [
+      { part: "bushings",  title: "HV enters", text: "11 kV arrives through the porcelain bushings on the tank cover." },
+      { part: "primary",   title: "Primary makes flux", text: "The high-voltage winding draws magnetising current and drives alternating flux." },
+      { part: "core",      title: "Flux circulates", text: "Alternating flux flows around the laminated core. Watch the direction reverse every half cycle." },
+      { part: "secondary", title: "Voltage is induced", text: "The same flux links fewer turns, giving 400 V at higher current." },
+      { part: "radiator",  title: "Losses are cooled", text: "Oil carries heat from the winding and core to the radiator." },
+      { part: "tank",      title: "Everything is contained", text: "The tank holds oil and protects the active parts." }
+    ],
+    faults: {
+      short: { name: "Shorted Secondary Turn", part: "secondary",
+        symptoms: ["Local hot spot, oil darkening, gas bubbles in the Buchholz relay", "Primary current higher than load suggests", "Output voltage slightly low", "Loud hum and vibration"],
+        repair: ["De-energise and earth both sides.", "Dissolved gas analysis of the oil sample.", "Measure turns ratio and winding resistance per phase.", "Inspect the winding; replace or rewind the damaged coil.", "Dry out, refill with filtered oil and re-test before re-energising."] },
+      clog: { name: "Clogged Radiator Fins", part: "radiator",
+        symptoms: ["Top-oil temperature climbing above 85 °C", "Fins cool at the bottom and hot only at the top", "Temperature alarm under normal load", "Oil expands, the level gauge rises"],
+        repair: ["Reduce the load and check oil temperature.", "Clean external dust and debris from the fins.", "Open radiator valves and check for sludge in the oil.", "Flush or replace the radiator if the internal passage is blocked.", "Confirm temperature rise is back within limits."] }
+    }
+  }
+};
+/* ============================ HELPERS ============================ */
+const TAU = Math.PI * 2;
+const COL = { amber: new THREE.Color(0xf5a524), cyan: new THREE.Color(0x35d6e8), red: new THREE.Color(0xff3040), hot: new THREE.Color(0xff7a1a) };
+const mat = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, metalness: 0.1, roughness: 0.6 }, o));
+function newPart(id, cfg) {
+  const g = new THREE.Group();
+  g.userData = { partId: id, casing: !!cfg.casing, mats: [] };
+  return g;
+}
+function reg(part, m) {
+  if (m.userData.reg) { if (!part.userData.mats.includes(m)) part.userData.mats.push(m); return; }
+  m.userData.reg = true;
+  m.userData.baseOp = m.opacity; m.userData.baseTr = m.transparent;
+  if (m.emissive) {
+    m.userData.e0 = m.emissive.clone().multiplyScalar(m.emissiveIntensity);
+    m.userData.e = m.userData.e0.clone();
+    m.emissiveIntensity = 1;
+  }
+  part.userData.mats.push(m);
+}
+function own(part, m) { // one material instance per part, so dim / x-ray / fault states never leak between parts
+  if (Array.isArray(m)) return m.map(x => own(part, x));
+  const pid = part.userData.partId;
+  if (m.userData.owner && m.userData.owner !== pid) { const n = new m.constructor(); n.copy(m); n.userData = {}; m = n; }
+  if (!m.userData.owner) m.userData.owner = pid;
+  reg(part, m); return m;
+}
+function put(part, geo, m, p, r, s) {
+  const mesh = new THREE.Mesh(geo, own(part, m));
+  if (p) mesh.position.set(p[0], p[1], p[2]);
+  if (r) mesh.rotation.set(r[0], r[1], r[2]);
+  if (s) mesh.scale.set(s[0], s[1], s[2]);
+  part.add(mesh); return mesh;
+}
+function setE(m, color, k) { if (m.userData.e) m.userData.e.copy(m.userData.e0).addScaledVector(color, k); }
+const cylX = (r1, r2, len, seg = 40, open = false) => { const g = new THREE.CylinderGeometry(r1, r2, len, seg, 1, open); g.rotateZ(Math.PI / 2); return g; };
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+function canvasTex(w, h, draw, srgb = true) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = 8;
+  if (srgb) t.encoding = THREE.sRGBEncoding;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+// Laminated steel box: stripes follow the stack direction (z), front/back faces plain.
+function lamBox(w, h, d, base, part) {
+  const mk = (vertical, repeat) => {
+    const t = canvasTex(vertical ? 16 : 4, vertical ? 4 : 16, (c, W, H) => {
+      c.fillStyle = '#8c98a4'; c.fillRect(0, 0, W, H);
+      c.fillStyle = '#4d5a66'; vertical ? c.fillRect(W / 2, 0, W / 2, H) : c.fillRect(0, H / 2, W, H / 2);
+    });
+    vertical ? t.repeat.set(repeat, 1) : t.repeat.set(1, repeat);
+    return mat(0xffffff, { map: t, metalness: 0.75, roughness: 0.45 });
+  };
+  const n = Math.max(2, Math.round(d / 0.06));
+  const plain = mat(base, { metalness: 0.8, roughness: 0.4 });
+  const mats = [mk(true, n), mk(true, n), mk(false, n), mk(false, n), plain, plain];
+  mats.forEach(m => reg(part, m));
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+}
+function stadium(w, h) {
+  const r = h / 2, s = new THREE.Shape();
+  s.moveTo(-w / 2 + r, -h / 2); s.lineTo(w / 2 - r, -h / 2);
+  s.absarc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2, false);
+  s.lineTo(-w / 2 + r, h / 2); s.absarc(-w / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5, false);
+  return s;
+}
+function polyline(pts) { // pts [[x,z]...] -> list of segments
+  const segs = []; let len = 0; const cum = [0];
+  for (let i = 1; i < pts.length; i++) { len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); cum.push(len); }
+  return { pts, len, cum, at(u, out) {
+    u = Math.max(0, Math.min(len - 1e-6, u));
+    let i = 1; while (i < cum.length - 1 && cum[i] < u) i++;
+    const f = (u - cum[i - 1]) / (cum[i] - cum[i - 1]);
+    out.x = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f; out.z = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f; return out;
+  } };
+}
+
+const BUILDERS = {};
+
+/* ============================ MOTOR ============================ */
+BUILDERS.motor = function (cfg) {
+  const root = new THREE.Group(), parts = {};
+  const mk = id => (parts[id] = newPart(id, cfg.parts[id]), root.add(parts[id]), parts[id]);
+  const frameM = mat(0x2a6f8f, { metalness: 0.65, roughness: 0.42, side: THREE.DoubleSide });
+  const boxM = mat(0x1d5873, { metalness: 0.6, roughness: 0.45 });
+  const steel = mat(0x9aa6b2, { metalness: 0.9, roughness: 0.3 });
+  const alu = mat(0xc4ccd4, { metalness: 1, roughness: 0.28 });
+  const dark = mat(0x182029, { metalness: 0.3, roughness: 0.6 });
+
+  // --- Frame
+  const frame = mk('frame');
+  put(frame, cylX(1.5, 1.5, 2.8, 64, true), frameM, [0, 0, 0]);
+  for (let i = 0; i < 36; i++) {
+    const th = i / 36 * TAU; if (Math.cos(th) > 0.955) continue;
+    const r = 1.61;
+    put(frame, new THREE.BoxGeometry(2.6, 0.24, 0.07), frameM, [0, r * Math.cos(th), r * Math.sin(th)], [th, 0, 0]);
+  }
+  [-0.95, 0.95].forEach(z => put(frame, new THREE.BoxGeometry(2.8, 0.3, 0.6), frameM, [0, -1.62, z]));
+  [-1.3, 1.3].forEach(x => { // fixing holes on feet
+    [-0.95, 0.95].forEach(z => put(frame, new THREE.CylinderGeometry(0.09, 0.09, 0.32, 16), dark, [x, -1.62, z]));
+  });
+  // --- End bells
+  const eb = mk('endbells');
+  [1, -1].forEach(s => {
+    put(eb, cylX(1.55, 1.55, 0.45, 64), frameM, [s * 1.625, 0, 0]);
+    put(eb, cylX(0.62, 0.62, 0.3, 40), frameM, [s * 1.95, 0, 0]);
+    put(eb, cylX(0.3, 0.3, 0.06, 32), dark, [s * 2.1, 0, 0]);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + 0.2;
+      put(eb, cylX(0.07, 0.07, 0.1, 6), steel, [s * 1.88, 1.4 * Math.cos(a), 1.4 * Math.sin(a)]); }
+  });
+  // --- Stator core (36 slots, 24 laminations)
+  const stator = mk('stator');
+  const sh = new THREE.Shape(); sh.absarc(0, 0, 1.4, 0, TAU, false);
+  const hole = new THREE.Path(); const pt = (r, a) => [r * Math.cos(a), r * Math.sin(a)]; const d2r = Math.PI / 180;
+  for (let k = 0; k < 36; k++) { const a = k * 10 * d2r;
+    [[0.88, a - 3 * d2r], [1.06, a - 3 * d2r], [1.06, a + 3 * d2r], [0.88, a + 3 * d2r]].forEach((q, j) => {
+      const p = pt(q[0], q[1]); (k === 0 && j === 0) ? hole.moveTo(p[0], p[1]) : hole.lineTo(p[0], p[1]); }); }
+  sh.holes.push(hole);
+  const lamG = new THREE.ExtrudeGeometry(sh, { depth: 0.075, bevelEnabled: false, curveSegments: 48 }); lamG.rotateY(Math.PI / 2);
+  const lamA = mat(0x7d8a97, { metalness: 0.85, roughness: 0.38 }), lamB = mat(0x66737f, { metalness: 0.85, roughness: 0.42 });
+  for (let i = 0; i < 24; i++) put(stator, lamG, i % 2 ? lamA : lamB, [-1.0 + i * (2.0 / 24), 0, 0]);
+  // --- Windings (12 coils, 3 phases)
+  const wind = mk('windings'); const coils = [];
+  const P = [[-1, .97, -.168], [0, .97, -.168], [1, .97, -.168], [1.2, 1.05, -.1], [1.3, 1.12, 0], [1.2, 1.05, .1], [1, .97, .168], [0, .97, .168], [-1, .97, .168], [-1.2, 1.05, .1], [-1.3, 1.12, 0], [-1.2, 1.05, -.1]].map(p => new THREE.Vector3(...p));
+  const coilG = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P, true, 'catmullrom', 0.5), 120, 0.042, 8, true);
+  for (let j = 0; j < 12; j++) {
+    const m = mat(0xb87333, { metalness: 0.9, roughness: 0.28, emissive: 0x000000 });
+    const mesh = put(wind, coilG, m); mesh.rotation.x = j * 30 * d2r; coils.push({ m, th: j * 30 * d2r });
+  }
+  // --- Rotor
+  const rotor = mk('rotor');
+  put(rotor, cylX(0.72, 0.72, 2.0, 48), mat(0x58626d, { metalness: 0.85, roughness: 0.4 }));
+  [1.05, -1.05].forEach(x => put(rotor, cylX(0.8, 0.8, 0.1, 48), alu, [x, 0, 0]));
+  for (let i = 0; i < 28; i++) { const a = i / 28 * TAU;
+    put(rotor, new THREE.BoxGeometry(2.0, 0.07, 0.1), alu, [0, 0.74 * Math.cos(a), 0.74 * Math.sin(a)], [a, 0, 0]); }
+  const mark = mat(0x35d6e8, { emissive: 0x35d6e8, emissiveIntensity: 0.9 });
+  put(rotor, new THREE.BoxGeometry(2.1, 0.03, 0.06), mark, [0, 0.79, 0]);
+  // --- Shaft
+  const shaft = mk('shaft');
+  put(shaft, cylX(0.19, 0.19, 6.1, 32), steel, [0.15, 0, 0]);
+  put(shaft, new THREE.BoxGeometry(0.8, 0.07, 0.1), steel, [2.75, 0.2, 0]);
+  put(shaft, cylX(0.25, 0.25, 0.06, 32), steel, [3.2, 0, 0]);
+  // --- Fan
+  const fan = mk('fan'); const fanM = mat(0x1c2a36, { metalness: 0.2, roughness: 0.55, side: THREE.DoubleSide });
+  put(fan, cylX(0.36, 0.3, 0.36, 32), fanM, [-2.55, 0, 0]);
+  put(fan, cylX(1.0, 1.0, 0.04, 48), fanM, [-2.32, 0, 0]);
+  for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, g = new THREE.Group();
+    g.rotation.x = a; const b = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.7, 0.035), fanM);
+    b.position.set(-2.52, 0.72, 0); b.rotation.y = 0.55; g.add(b); fan.add(g); }
+  reg(fan, fanM);
+  // --- Terminal box
+  const tb = mk('terminal');
+  put(tb, new THREE.BoxGeometry(0.95, 0.5, 0.85), boxM, [0.35, 1.95, 0]);
+  put(tb, new THREE.BoxGeometry(1.02, 0.09, 0.92), boxM, [0.35, 2.24, 0]);
+  const gl = new THREE.CylinderGeometry(0.13, 0.13, 0.35, 20); gl.rotateX(Math.PI / 2);
+  put(tb, gl, dark, [0.35, 1.95, 0.6]);
+  [[-.38, -.34], [.38, -.34], [-.38, .34], [.38, .34]].forEach(q => put(tb, new THREE.CylinderGeometry(0.045, 0.045, 0.05, 6), steel, [0.35 + q[0], 2.3, q[1]]));
+
+  let rotAng = 0, fanAng = 0, heat = 0, wob = 0; const info = { rpm: 0, text: '' };
+  return {
+    root, parts,
+    update(s, dt, t) {
+      const v = s.speed, f = s.fault;
+      const fieldW = 8 * v * (s.running ? 1 : 0);
+      let slip = 0.035 + (s.speed - 0.5) * 0.02, rotW = fieldW * (1 - slip);
+      if (f === 'overheat') { rotW *= 0.62; wob += dt; }
+      rotAng += rotW * dt; fanAng += (f === 'fan' ? 0 : rotW) * dt;
+      parts.rotor.rotation.x = rotAng; parts.shaft.rotation.x = rotAng; parts.fan.rotation.x = fanAng;
+      parts.rotor.rotation.y = f === 'overheat' && s.running ? Math.sin(wob * 40) * 0.004 : 0;
+      const ph = s.running ? t * 8 * v : 0;
+      coils.forEach(c => {
+        let I = s.running ? Math.cos(2 * c.th - ph) : 0.0;
+        let k = Math.abs(I) * 0.9;
+        if (f === 'overheat') k = k * 0.8 + 0.35 + 0.3 * Math.sin(t * 6 + c.th);
+        const col = I >= 0 ? COL.amber : COL.cyan;
+        setE(c.m, f === 'overheat' ? COL.hot : col, k);
+      });
+      heat += ((f === 'fan' ? 1 : f === 'overheat' ? 0.5 : 0) - heat) * Math.min(1, dt * (f === 'fan' ? 0.12 : 0.3));
+      parts.frame.userData.mats.forEach(m => setE(m, COL.hot, heat * 0.55));
+      parts.stator.userData.mats.forEach(m => setE(m, COL.hot, heat * 0.4));
+      const rpm = rotW / 8 * 1500 / 1; info.rpm = Math.round(rotW / (TAU) * 60);
+      info.text = s.running ? `${info.rpm} rpm · field ${Math.round(fieldW / TAU * 60)} rpm` + (f ? ` · ${f === 'fan' ? 'frame +' + Math.round(heat * 38) + '°C' : 'winding 168°C'}` : '') : 'stopped';
+    },
+    readout() { return info.text; },
+    reset() { heat = 0; }
+  };
+};
+/* ============================ PCB ============================ */
+BUILDERS.pcb = function (cfg) {
+  const root = new THREE.Group(), parts = {};
+  const mk = id => (parts[id] = newPart(id, cfg.parts[id]), root.add(parts[id]), parts[id]);
+  const BW = 6.4, BD = 3.8, T = 0.14, TOP = T / 2 + 0.0;   // board centred at y=0, top face at y=0.07
+  const Y0 = T / 2;
+  // --- Substrate with silkscreen texture
+  const board = mk('board');
+  const px = x => (x + BW / 2) / BW, pz = z => (z + BD / 2) / BD;
+  const topTex = canvasTex(1280, 760, (c, W, H) => {
+    c.fillStyle = '#0e5a3b'; c.fillRect(0, 0, W, H);
+    for (let i = 0; i < 4000; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * .06})`; c.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+    const X = x => px(x) * W, Z = z => pz(z) * H;
+    c.strokeStyle = '#e8efe8'; c.lineWidth = 3; c.strokeRect(X(-3.05), Z(-1.75), X(3.05) - X(-3.05), Z(1.75) - Z(-1.75));
+    c.fillStyle = '#e8efe8'; c.font = 'bold 26px monospace';
+    c.fillText('NX-DEV REV C', X(0.1), Z(1.2)); c.font = '20px monospace';
+    c.fillText('5V', X(-2.2), Z(0.35)); c.fillText('3V3', X(-0.9), Z(0.1)); c.fillText('RESET', X(1.85), Z(-0.78)); c.fillText('USB-C', X(-2.95), Z(-0.62));
+    c.fillText('C1', X(-2.15), Z(-0.55)); c.fillText('C2', X(-1.05), Z(-0.55)); c.fillText('U1', X(-1.4), Z(1.05)); c.fillText('L1', X(-0.62), Z(1.05));
+    c.fillStyle = '#d9b44a';
+    for (let i = 0; i < 16; i++) [-1.62, 1.62].forEach(z => c.fillRect(X(-2.5 + i * 0.34) - 6, Z(z) - 9, 12, 18));
+    [[-2.9, -1.55], [2.9, -1.55], [-2.9, 1.55], [2.9, 1.55]].forEach(q => { c.beginPath(); c.arc(X(q[0]), Z(q[1]), 13, 0, TAU); c.fillStyle = '#d9b44a'; c.fill(); c.beginPath(); c.arc(X(q[0]), Z(q[1]), 7, 0, TAU); c.fillStyle = '#071a12'; c.fill(); c.fillStyle = '#d9b44a'; });
+  });
+  const side = mat(0x1b3a2a, { roughness: 0.7 }), topM = mat(0xffffff, { map: topTex, roughness: 0.55, metalness: 0.05 });
+  const bot = mat(0x0f2a1d, { roughness: 0.7 });
+  [side, topM, bot].forEach(m => reg(board, m));
+  const bmesh = new THREE.Mesh(new THREE.BoxGeometry(BW, T, BD), [side, side, topM, bot, side, side]); board.add(bmesh);
+  // --- Traces (power + signal + decoration)
+  const traces = mk('traces');
+  const cu = mat(0xd9923a, { metalness: 0.9, roughness: 0.3, emissive: 0xf5a524, emissiveIntensity: 0.55 });
+  const cuThin = mat(0xc88434, { metalness: 0.9, roughness: 0.3, emissive: 0xf5a524, emissiveIntensity: 0.28 });
+  const trY = Y0 + 0.012;
+  const trace = (pts, w, m) => {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-3) continue;
+      put(traces, new THREE.BoxGeometry(L, 0.022, w), m, [(a[0] + b[0]) / 2, trY, (a[1] + b[1]) / 2], [0, -Math.atan2(b[1] - a[1], b[0] - a[0]), 0]);
+    }
+    pts.forEach(p => put(traces, new THREE.CylinderGeometry(w / 2, w / 2, 0.022, 10), m, [p[0], trY, p[1]]));
+  };
+  const powerPath = polyline([[-2.62, 0], [-1.9, 0], [-1.9, 0.7], [-1.25, 0.7], [-0.45, 0.7], [-0.18, 0.7], [-0.18, 0], [0.15, 0]]);
+  trace([[-2.62, 0], [-1.9, 0], [-1.9, 0.7], [-1.62, 0.7]], 0.15, cu);
+  trace([[-0.88, 0.7], [-0.72, 0.7]], 0.15, cu);
+  trace([[-0.18, 0.7], [-0.18, 0], [0.15, 0]], 0.15, cu);
+  trace([[-1.9, 0], [-1.9, -0.95]], 0.12, cu);
+  trace([[-0.8, 0.7], [-0.8, -0.95]], 0.12, cu);
+  const dataPath = polyline([[1.45, 0.2], [2.4, 0.2], [2.4, 1.55]]);
+  trace(dataPath.pts, 0.07, cuThin);
+  trace([[1.9, -1.2], [1.7, -1.2], [1.7, -0.2], [1.45, -0.2]], 0.07, cuThin);
+  for (let i = 0; i < 5; i++) {
+    const x = 0.45 + i * 0.18;
+    trace([[x, -0.65], [x, -0.95], [x - 0.3 + i * 0.08, -1.25], [x - 0.3 + i * 0.08, -1.55]], 0.05, cuThin);
+    trace([[x, 0.65], [x, 0.95], [x + 0.35 - i * 0.05, 1.25], [x + 0.35 - i * 0.05, 1.55]], 0.05, cuThin);
+  }
+  trace([[-2.6, -1.4], [-0.4, -1.4], [-0.4, -1.55]], 0.06, cuThin);
+  // packets
+  const pk = [], dk = [];
+  const coreM = c => new THREE.MeshBasicMaterial({ color: c });
+  const haloM = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false });
+  const sph = new THREE.SphereGeometry(0.055, 12, 10), hsph = new THREE.SphereGeometry(0.12, 12, 10);
+  const mkPacket = () => { const g = new THREE.Group(), a = coreM(0xffb02e), h = haloM(0xffb02e);
+    g.add(new THREE.Mesh(sph, a)); g.add(new THREE.Mesh(hsph, h)); reg(traces, a); reg(traces, h); traces.add(g); return { g, a, h }; };
+  for (let i = 0; i < 16; i++) pk.push(mkPacket());
+  for (let i = 0; i < 8; i++) dk.push(mkPacket());
+  // --- MCU
+  const mcu = mk('mcu');
+  const labelTex = canvasTex(256, 256, (c, W, H) => {
+    c.fillStyle = '#111418'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#ffffff'; c.font = 'bold 34px monospace'; c.fillText('NX32-M4F', 34, 100); c.font = '24px monospace';
+    c.fillText('168MHz  64K', 34, 140); c.fillText('2611 ARM', 34, 176); c.beginPath(); c.arc(40, 220, 9, 0, TAU); c.fill();
+  });
+  const icBody = mat(0x15181c, { roughness: 0.5, metalness: 0.2 });
+  const icTop = mat(0xffffff, { map: labelTex, emissiveMap: labelTex, emissive: 0x35d6e8, emissiveIntensity: 0.35, roughness: 0.4 });
+  put(mcu, new THREE.BoxGeometry(1.0, 0.14, 1.0), [icBody, icBody, icTop, icBody, icBody, icBody], [0.8, Y0 + 0.07, 0]);
+  const pinM = mat(0xc9ced4, { metalness: 1, roughness: 0.3 });
+  for (let i = 0; i < 16; i++) {
+    const o = -0.47 + i * 0.0625;
+    [-1, 1].forEach(s => { put(mcu, new THREE.BoxGeometry(0.17, 0.025, 0.035), pinM, [0.8 + s * 0.57, Y0 + 0.04, o]);
+      put(mcu, new THREE.BoxGeometry(0.035, 0.025, 0.17), pinM, [0.8 + o, Y0 + 0.04, s * 0.57]); });
+  }
+  // --- Regulator (SOT-223)
+  const reg1 = mk('reg');
+  put(reg1, new THREE.BoxGeometry(0.5, 0.14, 0.3), icBody, [-1.25, Y0 + 0.07, 0.7]);
+  put(reg1, new THREE.BoxGeometry(0.34, 0.032, 0.24), pinM, [-0.99, Y0 + 0.016, 0.7]);
+  [-0.09, 0, 0.09].forEach(o => put(reg1, new THREE.BoxGeometry(0.18, 0.03, 0.055), pinM, [-1.55, Y0 + 0.03, 0.7 + o]));
+  put(reg1, new THREE.BoxGeometry(0.28, 0.01, 0.12), mat(0x30363d, { roughness: 0.4 }), [-1.3, Y0 + 0.145, 0.7]);
+  // --- Capacitors
+  const caps = mk('caps');
+  const capBody = mat(0x0f1b2e, { roughness: 0.45, metalness: 0.35 }), capTop = mat(0xb6bdc4, { metalness: 1, roughness: 0.3 });
+  const stripe = mat(0xe6e9ec, { roughness: 0.6 }), rubber = mat(0x2a2d31, { roughness: 0.9 });
+  [[-1.9, -0.95, 0.24, 0.52], [-0.8, -0.95, 0.2, 0.42]].forEach(c => {
+    const [x, z, r, h] = c;
+    put(caps, new THREE.CylinderGeometry(r, r, h, 36), capBody, [x, Y0 + 0.05 + h / 2, z]);
+    put(caps, new THREE.CylinderGeometry(r - 0.012, r - 0.012, 0.03, 36), capTop, [x, Y0 + 0.05 + h + 0.0, z]);
+    put(caps, new THREE.BoxGeometry(r * 1.2, 0.01, 0.02), rubber, [x, Y0 + 0.05 + h + 0.016, z]);
+    put(caps, new THREE.BoxGeometry(0.02, 0.01, r * 1.2), rubber, [x, Y0 + 0.05 + h + 0.016, z]);
+    put(caps, new THREE.CylinderGeometry(r + 0.006, r + 0.006, h * 0.82, 14, 1, true, Math.PI * 0.9, Math.PI * 0.35), stripe, [x, Y0 + 0.05 + h / 2, z]);
+    put(caps, new THREE.CylinderGeometry(r + 0.01, r + 0.01, 0.05, 36), rubber, [x, Y0 + 0.025, z]);
+  });
+  // --- Inductor
+  const ind = mk('inductor');
+  put(ind, new THREE.BoxGeometry(0.54, 0.3, 0.54), mat(0x24272c, { roughness: 0.55, metalness: 0.45 }), [-0.45, Y0 + 0.15, 0.7]);
+  put(ind, new THREE.BoxGeometry(0.46, 0.02, 0.46), mat(0x3b4148, { roughness: 0.4, metalness: 0.6 }), [-0.45, Y0 + 0.31, 0.7]);
+  [-1, 1].forEach(s => put(ind, new THREE.BoxGeometry(0.09, 0.2, 0.42), mat(0xd08a45, { metalness: 0.95, roughness: 0.3 }), [-0.45 + s * 0.285, Y0 + 0.1, 0.7]));
+  // --- USB-C
+  const usb = mk('usb');
+  const shellG = new THREE.ExtrudeGeometry(stadium(0.95, 0.34), { depth: 0.8, bevelEnabled: false, curveSegments: 20 }); shellG.rotateY(Math.PI / 2);
+  const shellM = mat(0xaab2ba, { metalness: 1, roughness: 0.25 });
+  put(usb, shellG, shellM, [-3.25, Y0 + 0.17, 0]);
+  const cavG = new THREE.ExtrudeGeometry(stadium(0.82, 0.24), { depth: 0.03, bevelEnabled: false, curveSegments: 20 }); cavG.rotateY(Math.PI / 2);
+  put(usb, cavG, mat(0x040506, { roughness: 0.9 }), [-3.255, Y0 + 0.17, 0]);
+  put(usb, new THREE.BoxGeometry(0.55, 0.035, 0.6), mat(0x20252b, { metalness: 0.6, roughness: 0.4 }), [-2.9, Y0 + 0.17, 0]);
+  // --- Reset switch
+  const rs = mk('reset');
+  put(rs, new THREE.BoxGeometry(0.55, 0.12, 0.55), mat(0x9ea6ae, { metalness: 0.9, roughness: 0.35 }), [2.2, Y0 + 0.06, -1.2]);
+  put(rs, new THREE.CylinderGeometry(0.17, 0.17, 0.13, 28), mat(0x0e1013, { roughness: 0.4 }), [2.2, Y0 + 0.185, -1.2]);
+  [-1, 1].forEach(s => put(rs, new THREE.BoxGeometry(0.1, 0.03, 0.2), pinM, [2.2 + s * 0.31, Y0 + 0.015, -1.2]));
+
+  const sp = { x: 0, z: 0 }; let tAcc = 0, info = '', stutter = 0;
+  const lenP = powerPath.len, regU = (() => { let u = 0; for (let i = 1; i < powerPath.pts.length; i++) { if (powerPath.pts[i][0] === -1.25 && powerPath.pts[i][1] === 0.7) return powerPath.cum[i]; } return lenP * 0.5; })();
+  const flick = () => (Math.random() < 0.45 ? 0.15 : 1);
+  return {
+    root, parts,
+    update(s, dt, t) {
+      const f = s.fault, run = s.running; if (run) tAcc += dt * (0.4 + 1.6 * s.speed);
+      let mcuPow = run ? 1 : 0.55, stut = 1;
+      if (f === 'cap') { stutter -= dt; if (stutter <= 0) { stutter = rnd(0.05, 0.25); stut = Math.random() < 0.5 ? 0.1 : 1; this._st = stut; } stut = this._st ?? 1; mcuPow = run ? flick() : 0.3; }
+      if (f === 'reg') mcuPow = 0.08;
+      const spacing = lenP / pk.length;
+      pk.forEach((p, i) => {
+        let u = ((tAcc * 1.1 + i * spacing) % lenP);
+        if (f === 'cap') u = ((tAcc * 1.1 * (0.4 + 0.6 * (this._st ?? 1)) + i * spacing + Math.sin(t * 17 + i) * 0.1) % lenP + lenP) % lenP;
+        powerPath.at(u, sp); p.g.position.set(sp.x, Y0 + 0.05, sp.z);
+        const after = u > regU; let vis = run;
+        if (f === 'reg' && after) vis = false;
+        if (f === 'cap' && Math.random() < 0.08) vis = false;
+        p.g.visible = vis; const c = after ? 0x35d6e8 : 0xffb02e; p.a.color.setHex(c); p.h.color.setHex(c);
+      });
+      dk.forEach((p, i) => {
+        const u = ((tAcc * 1.8 + i * dataPath.len / dk.length) % dataPath.len);
+        dataPath.at(u, sp); p.g.position.set(sp.x, Y0 + 0.05, sp.z);
+        p.g.visible = run && f !== 'reg' && !(f === 'cap' && Math.random() < 0.3); p.a.color.setHex(0x86ffb4); p.h.color.setHex(0x86ffb4);
+      });
+      icTop.userData.e.copy(COL.cyan).multiplyScalar(0.55 * mcuPow);
+      info = !run ? 'idle · 5.00 V in' : f === 'reg' ? '5.00 V → 3.3 V rail 0.00 V · shutdown' : f === 'cap' ? '5 V ripple ±0.40 V · MCU resets' : `5.00 V → 3.30 V · ${Math.round(30 + 15 * s.speed)} mA`;
+    },
+    readout() { return info; }, reset() {}
+  };
+};
+
+/* ============================ TRANSFORMER ============================ */
+BUILDERS.transformer = function (cfg) {
+  const root = new THREE.Group(), parts = {};
+  const mk = id => (parts[id] = newPart(id, cfg.parts[id]), root.add(parts[id]), parts[id]);
+  const tankM = mat(0x3d5568, { metalness: 0.7, roughness: 0.48, side: THREE.DoubleSide });
+  const radM = mat(0x4b6a82, { metalness: 0.65, roughness: 0.5 });
+  const portM = mat(0x8a5632, { metalness: 0.0, roughness: 0.18 }), cap = mat(0xb8c0c8, { metalness: 1, roughness: 0.3 });
+  // --- Tank (front wall removed: cut-away)
+  const tank = mk('tank');
+  put(tank, new THREE.BoxGeometry(3.7, 0.1, 2.1), tankM, [0, -1.75, 0]);
+  put(tank, new THREE.BoxGeometry(0.1, 3.5, 2.1), tankM, [-1.85, 0, 0]);
+  put(tank, new THREE.BoxGeometry(0.1, 3.5, 2.1), tankM, [1.85, 0, 0]);
+  put(tank, new THREE.BoxGeometry(3.7, 3.5, 0.1), tankM, [0, 0, -1.05]);
+  put(tank, new THREE.BoxGeometry(3.9, 0.12, 2.3), tankM, [0, 1.8, 0]);
+  [-1.0, 0, 1.0].forEach(y => put(tank, new THREE.BoxGeometry(3.7, 0.08, 0.06), tankM, [0, y, -1.1]));
+  [-0.6, 0.6].forEach(x => put(tank, new THREE.TorusGeometry(0.12, 0.03, 8, 20), cap, [x, 1.9, 0.9], [Math.PI / 2, 0, 0]));
+  [-1.85, 1.85].forEach(x => { put(tank, new THREE.BoxGeometry(0.14, 3.5, 0.1), tankM, [x, 0, 1.05]); });
+  // --- Core
+  const core = mk('core');
+  [-0.9, 0.9].forEach(x => { const m = lamBox(0.55, 1.9, 0.8, 0x8c98a4, core); m.position.set(x, 0, 0); core.add(m); });
+  [-1.2, 1.2].forEach(y => { const m = lamBox(2.35, 0.5, 0.8, 0x8c98a4, core); m.position.set(0, y, 0); core.add(m); });
+  // --- Windings
+  const pri = mk('primary'), sec = mk('secondary'); const priM = [], secM = [];
+  const ringP = new THREE.TorusGeometry(0.54, 0.034, 8, 44); ringP.rotateX(Math.PI / 2);
+  const ringP2 = new THREE.TorusGeometry(0.61, 0.034, 8, 44); ringP2.rotateX(Math.PI / 2);
+  for (let i = 0; i < 32; i++) {
+    [ringP, ringP2].forEach((g, k) => { const m = mat(0xc77a3a, { metalness: 0.9, roughness: 0.3, emissive: 0x000000 });
+      put(pri, g, m, [-0.9, -0.85 + i * 0.0548 + k * 0.027, 0]); priM.push({ m, i: i * 2 + k }); });
+  }
+  const ringS = new THREE.TorusGeometry(0.54, 0.075, 10, 44); ringS.rotateX(Math.PI / 2);
+  for (let i = 0; i < 12; i++) { const m = mat(0xe08a4a, { metalness: 0.9, roughness: 0.25, emissive: 0x000000 });
+    put(sec, ringS, m, [0.9, -0.77 + i * 0.14, 0]); secM.push({ m, i }); }
+  const lead = (part, m, a, b, c, r) => put(part, new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(...c)]), 16, r, 8, false), m);
+  const leadP = priM[0].m, leadS = secM[0].m;
+  [-0.55, 0.55].forEach(z => { lead(pri, leadP, [-0.9, 0.85, z * 0.5], [-1.0, 1.4, z], [-1.0, 1.9, z], 0.03); lead(sec, leadS, [0.9, 0.8, z * 0.5], [1.0, 1.4, z * 0.9], [1.0, 1.9, z * 0.9], 0.05); });
+  // --- Bushings
+  const bush = mk('bushings');
+  const bushing = (x, z, n, sc) => {
+    const y0 = 1.86; let y = y0;
+    put(bush, new THREE.CylinderGeometry(0.22 * sc, 0.22 * sc, 0.07, 28), cap, [x, y + 0.035, z]); y += 0.07;
+    for (let i = 0; i < n; i++) {
+      put(bush, new THREE.CylinderGeometry(0.17 * sc, 0.15 * sc, 0.1, 28), portM, [x, y + 0.05, z]); y += 0.1;
+      put(bush, new THREE.CylinderGeometry(0.1 * sc, 0.1 * sc, 0.07, 20), portM, [x, y + 0.035, z]); y += 0.07;
+    }
+    put(bush, new THREE.CylinderGeometry(0.1 * sc, 0.1 * sc, 0.12, 20), cap, [x, y + 0.06, z]); y += 0.12;
+    put(bush, new THREE.CylinderGeometry(0.04 * sc, 0.04 * sc, 0.2, 12), cap, [x, y + 0.1, z]);
+  };
+  [-0.55, 0.55].forEach(z => { bushing(-1.0, z, 4, 1); bushing(1.0, z * 0.9, 3, 0.72); });
+  // --- Radiator (on +x side)
+  const rad = mk('radiator');
+  for (let i = 0; i < 12; i++) put(rad, new THREE.BoxGeometry(0.75, 2.05, 0.045), radM, [2.38, 0, -0.83 + i * 0.151]);
+  [-1.0, 1.0].forEach(y => put(rad, (() => { const g = new THREE.CylinderGeometry(0.09, 0.09, 1.9, 18); g.rotateX(Math.PI / 2); return g; })(), tankM, [2.0, y, 0]));
+  [-1.0, 1.0].forEach(y => put(rad, cylX(0.07, 0.07, 0.16, 12), tankM, [1.93, y, 0]));
+
+  // --- Flux loops (visible on core faces)
+  const loops = [], fluxHost = new THREE.Group(); root.add(fluxHost);
+  const fm = new THREE.MeshBasicMaterial({ color: 0x35d6e8, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+  const dotM = new THREE.MeshBasicMaterial({ color: 0x7ff0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const dg = new THREE.SphereGeometry(0.06, 10, 8);
+  [[0.75, 1.05], [0.9, 1.2], [1.05, 1.35]].forEach(([hx, hy], li) => [0.43, -0.43].forEach(z => {
+    const path = polyline([[-hx, -hy], [-hx, hy], [hx, hy], [hx, -hy], [-hx, -hy]]);
+    const pts = path.pts.map(p => new THREE.Vector3(p[0], p[1], z));
+    fluxHost.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x35d6e8, transparent: true, opacity: 0.35 })));
+    const dots = []; for (let i = 0; i < 8; i++) { const d = new THREE.Mesh(dg, dotM); fluxHost.add(d); dots.push(d); }
+    loops.push({ path, z, dots });
+  }));
+  // flux loops belong to the core: move with it
+  const fluxFollow = parts.core; let phase = 0, heat = 0, noise = 1; const sp = { x: 0, z: 0 }; let info = '';
+  const toPart = new THREE.Vector3();
+  return {
+    root, parts,
+    update(s, dt, t) {
+      const f = s.fault, run = s.running; const w = 3.2 * s.speed;
+      if (run) phase += w * dt * (f === 'short' ? 0.8 + 0.6 * Math.random() : 1);
+      let amp = run ? 1 : 0.0; if (f === 'short') amp = run ? 0.5 + 0.2 * Math.sin(t * 31) * Math.random() : 0;
+      const fl = Math.sin(phase) * amp, A = 4.0, u0 = (1 - Math.cos(phase)) / 2 * A;
+      fluxHost.position.copy(fluxFollow.position);
+      loops.forEach(l => l.dots.forEach((d, i) => { l.path.at(((u0 + i * l.path.len / l.dots.length) % l.path.len + l.path.len) % l.path.len, sp);
+        d.position.set(sp.x, sp.z, l.z); d.scale.setScalar(0.5 + Math.abs(fl) * 0.9); d.visible = run; }));
+      dotM.opacity = 0.3 + 0.7 * Math.abs(fl); fm.opacity = 0.1 + 0.3 * Math.abs(fl);
+      heat += ((f === 'clog' ? 1 : 0) - heat) * Math.min(1, dt * 0.1);
+      const pk = (run ? 1 : 0);
+      priM.forEach(r => { let k = (0.5 + 0.5 * Math.sin(2 * phase - r.i * 0.25)) * 0.7 * pk * (f === 'short' ? 1.5 : 1); setE(r.m, COL.amber, k + heat * 0.35); });
+      secM.forEach(r => { let k = (0.5 + 0.5 * Math.sin(2 * phase - r.i * 0.5)) * 0.8 * pk * (f === 'short' ? 0.4 : 1); setE(r.m, COL.amber, k + heat * 0.3); });
+      parts.core.userData.mats.forEach(m => setE(m, COL.cyan, Math.abs(fl) * 0.18 + 0));
+      parts.core.userData.mats.forEach(m => m.userData.e && m.userData.e.addScaledVector(COL.hot, heat * 0.3));
+      parts.tank.userData.mats.forEach(m => setE(m, COL.hot, heat * 0.18));
+      const L = Math.round(s.speed * 100);
+      info = !run ? 'de-energised' : f === 'short' ? '11 kV → 372 V · primary +45 %' : f === 'clog' ? `11 kV → 400 V · top oil ${Math.round(55 + heat * 40)} °C` : `11 kV → 400 V · ${Math.round(124 * s.speed)} A`;
+    },
+    readout() { return info; }, reset() { heat = 0; }
+  };
+};
+CONFIG.motor.floorY = -1.95; CONFIG.pcb.floorY = -1.45; CONFIG.transformer.floorY = -1.85;
+
+/* ============================ 3D STUDIO ENGINE ============================ */
+class Studio {
+  constructor(canvas, tagLayer, cb) {
+    this.canvas = canvas; this.tagLayer = tagLayer; this.cb = cb;
+    this.S = { running: true, speed: 0.6, explode: 0, xray: false, tags: true, sel: null, tourPart: null, fault: null };
+    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); r.setClearColor(0x000000, 0);
+    r.outputEncoding = THREE.sRGBEncoding; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+    this.scene = new THREE.Scene();
+    this.cam = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+    this.c = { target: new THREE.Vector3(), tTarget: new THREE.Vector3(), theta: 0, phi: 1, radius: 10, tTheta: 0, tPhi: 1, tRadius: 10 };
+    this.ray = new THREE.Raycaster(); this.ptrs = new Map(); this.tags = {}; this.exCur = 0; this.time = 0; this.frame = 0; this.hover = null; this.roTimer = 0;
+    this.buildEnvironment(); this.bind();
+    this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(canvas.parentElement); this.resize();
+    this.last = performance.now(); this.loop = this.loop.bind(this); this.raf = requestAnimationFrame(this.loop);
+  }
+  buildEnvironment() {
+    const sc = this.scene;
+    // three-point studio lighting
+    const key = new THREE.DirectionalLight(0xfff1de, 1.25); key.position.set(6, 9, 6);
+    const fill = new THREE.DirectionalLight(0x6aa8ff, 0.5); fill.position.set(-8, 3, 4);
+    const rim = new THREE.DirectionalLight(0x35d6e8, 0.9); rim.position.set(-2, 5, -9);
+    sc.add(key, fill, rim, new THREE.HemisphereLight(0x8aa6c1, 0x0a1017, 0.35));
+    // procedural studio reflection environment (no external HDRI)
+    const es = new THREE.Scene();
+    const gt = canvasTex(8, 256, (c, W, H) => { const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#9fb6cc'); g.addColorStop(0.5, '#2a3a4a'); g.addColorStop(1, '#0a1017'); c.fillStyle = g; c.fillRect(0, 0, W, H); });
+    es.add(new THREE.Mesh(new THREE.SphereGeometry(20, 24, 16), new THREE.MeshBasicMaterial({ map: gt, side: THREE.BackSide })));
+    [[0, 12, 0, 14, 0.4, 14, 5], [-14, 4, 4, 0.4, 8, 10, 3], [14, 3, -4, 0.4, 7, 9, 3], [0, 5, -15, 14, 5, 0.4, 4]].forEach(p => {
+      const m = new THREE.MeshBasicMaterial(); m.color.setScalar(p[6]);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(p[3], p[4], p[5]), m); b.position.set(p[0], p[1], p[2]); es.add(b); });
+    const pm = new THREE.PMREMGenerator(this.renderer); sc.environment = pm.fromScene(es, 0.03).texture; pm.dispose();
+    // floor
+    this.floor = new THREE.Group(); sc.add(this.floor);
+    const grid = new THREE.GridHelper(24, 48, 0x2f4d63, 0x172633); grid.material.transparent = true; grid.material.opacity = 0.7; this.floor.add(grid);
+    const dt = canvasTex(256, 256, (c, W, H) => { const g = c.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, W / 2); g.addColorStop(0, 'rgba(53,214,232,.10)'); g.addColorStop(0.6, 'rgba(53,214,232,.03)'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, W, H); });
+    const disc = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), new THREE.MeshBasicMaterial({ map: dt, transparent: true, depthWrite: false })); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.01; this.floor.add(disc);
+  }
+  setMachine(id) {
+    if (this.m) { this.scene.remove(this.m.root); this.m.root.traverse(o => o.geometry && o.geometry.dispose()); }
+    Object.values(this.tags).forEach(t => t.el.remove()); this.tags = {};
+    const cfg = this.cfg = CONFIG[id]; this.mid = id; this.m = BUILDERS[id](cfg); this.scene.add(this.m.root);
+    this.floor.position.y = cfg.floorY;
+    this.pick = []; this.m.root.traverse(o => { if (o.isMesh && o.material && (o.material.isMeshStandardMaterial || Array.isArray(o.material))) {
+      let p = o; while (p && !p.userData.partId) p = p.parent; if (p) { o.userData.pid = p.userData.partId; this.pick.push(o); } } });
+    Object.entries(cfg.parts).forEach(([pid, p]) => {
+      const el = document.createElement('button'); el.className = 'tag'; el.textContent = p.name; el.type = 'button';
+      el.addEventListener('click', e => { e.stopPropagation(); this.cb.onPick(pid); });
+      this.tagLayer.appendChild(el); this.tags[pid] = { el, occ: false, vis: 1, cls: '' };
+    });
+    this.exCur = 0; this.resetCamera(true);
+  }
+  resetCamera(snap) {
+    const cc = this.cfg.camera, c = this.c; c.tTarget.set(...cc.target);
+    const d = new THREE.Vector3(...cc.pos).sub(c.tTarget); c.tRadius = d.length(); c.tPhi = Math.acos(d.y / c.tRadius); c.tTheta = Math.atan2(d.x, d.z);
+    if (snap) { c.target.copy(c.tTarget); c.radius = c.tRadius; c.phi = c.tPhi; c.theta = c.tTheta; }
+  }
+  focus(pid) {
+    const p = this.m && this.m.parts[pid]; if (!p) return;
+    this.scene.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(p), size = b.getSize(new THREE.Vector3());
+    this.c.tTarget.copy(b.getCenter(new THREE.Vector3())); this.c.tRadius = Math.min(16, Math.max(3.8, size.length() * 1.5 + 2.2));
+  }
+  resize() {
+    const el = this.canvas.parentElement, w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;
+    this.renderer.setSize(w, h, false); this.cam.aspect = w / h; this.cam.updateProjectionMatrix(); this.W = w; this.H = h;
+  }
+  /* ---- own orbit controls: rotate / pan / zoom with damping ---- */
+  bind() {
+    const el = this.canvas, c = this.c;
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    el.addEventListener('pointerdown', e => {
+      el.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.down = { moved: 0, btn: e.button, pan: e.button === 2 || e.shiftKey || e.ctrlKey || e.metaKey };
+      if (this.ptrs.size === 2) this.pinch = this.pinchDist();
+    });
+    el.addEventListener('pointermove', e => {
+      const p = this.ptrs.get(e.pointerId);
+      if (!p) { this.hoverAt(e); return; }
+      const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+      if (this.ptrs.size === 1) {
+        this.down.moved += Math.abs(dx) + Math.abs(dy);
+        if (this.down.pan) this.pan(dx, dy); else { c.tTheta -= dx * 0.0065; c.tPhi = Math.min(Math.PI - 0.08, Math.max(0.08, c.tPhi - dy * 0.0065)); }
+      } else if (this.ptrs.size === 2) {
+        const d = this.pinchDist(); if (this.pinch) c.tRadius = Math.min(32, Math.max(2.5, c.tRadius * this.pinch / d)); this.pinch = d; this.pan(dx / 2, dy / 2);
+        if (this.down) this.down.moved += 99;
+      }
+    });
+    const up = e => {
+      const wasOne = this.ptrs.size === 1; this.ptrs.delete(e.pointerId);
+      if (wasOne && this.down && this.down.moved < 5 && this.down.btn === 0 && e.type === 'pointerup') this.click(e);
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); c.tRadius = Math.min(32, Math.max(2.5, c.tRadius * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
+  }
+  pinchDist() { const a = [...this.ptrs.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
+  pan(dx, dy) {
+    const s = this.c.tRadius * Math.tan(this.cam.fov * Math.PI / 360) * 2 / (this.H || 600), e = this.cam.matrixWorld.elements;
+    this.c.tTarget.x += (-dx * e[0] + dy * e[4]) * s; this.c.tTarget.y += (-dx * e[1] + dy * e[5]) * s; this.c.tTarget.z += (-dx * e[2] + dy * e[6]) * s;
+  }
+  castAt(e) {
+    const r = this.canvas.getBoundingClientRect();
+    this.ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.cam);
+    const list = this.pick.filter(o => o.visible && !(this.S.xray && this.m.parts[o.userData.pid].userData.casing));
+    const h = this.ray.intersectObjects(list, false)[0]; return h ? h.object.userData.pid : null;
+  }
+  click(e) { const pid = this.castAt(e); if (pid) this.cb.onPick(pid); }
+  hoverAt(e) {
+    if (this.hovQ) return; this.hovQ = true;
+    requestAnimationFrame(() => { this.hovQ = false; this.hover = this.castAt(e); this.canvas.style.cursor = this.hover ? 'pointer' : ''; });
+  }
+  /* ---- main loop ---- */
+  loop(now) {
+    this.raf = requestAnimationFrame(this.loop);
+    const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now; this.time += dt; this.frame++;
+    if (!this.m) return;
+    const S = this.S, m = this.m, parts = m.parts, c = this.c, t = this.time;
+    // explode (eased)
+    this.exCur += (S.explode - this.exCur) * (1 - Math.exp(-dt * 7));
+    Object.entries(this.cfg.parts).forEach(([pid, p]) => parts[pid].position.set(p.explode[0] * this.exCur, p.explode[1] * this.exCur, p.explode[2] * this.exCur));
+    m.update(S, dt, t);
+    // visual state per part
+    const extra = new THREE.Color();
+    Object.entries(parts).forEach(([pid, part]) => {
+      const dim = S.tourPart && S.tourPart !== pid ? 0.12 : 1, xr = S.xray && part.userData.casing ? 0.16 : 1;
+      extra.setRGB(0, 0, 0);
+      if (S.sel === pid) extra.addScaledVector(COL.cyan, 0.22 + 0.08 * Math.sin(t * 4)); else if (this.hover === pid) extra.addScaledVector(COL.cyan, 0.12);
+      if (S.fault && this.cfg.faults[S.fault].part === pid) extra.addScaledVector(COL.red, 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(t * 6.5)));
+      part.userData.mats.forEach(mt => {
+        const op = mt.userData.baseOp * dim * xr, tr = op < 0.999 || mt.userData.baseTr;
+        if (mt.transparent !== tr) { mt.transparent = tr; mt.needsUpdate = true; }
+        mt.opacity = op; mt.depthWrite = op > 0.5;
+        if (mt.emissive && mt.userData.e) mt.emissive.copy(mt.userData.e).add(extra).multiplyScalar(dim === 1 ? 1 : 0.5);
+      });
+    });
+    // camera ease
+    const k = 1 - Math.exp(-dt * 6.5);
+    c.target.lerp(c.tTarget, k); c.radius += (c.tRadius - c.radius) * k; c.phi += (c.tPhi - c.phi) * k;
+    let dth = c.tTheta - c.theta; c.theta += dth * k;
+    const sp = Math.sin(c.phi);
+    this.cam.position.set(c.target.x + c.radius * sp * Math.sin(c.theta), c.target.y + c.radius * Math.cos(c.phi), c.target.z + c.radius * sp * Math.cos(c.theta));
+    this.cam.lookAt(c.target); this.scene.updateMatrixWorld(true); this.cam.updateMatrixWorld();
+    this.updateTags();
+    this.renderer.render(this.scene, this.cam);
+    if (t - this.roTimer > 0.3) { this.roTimer = t; this.cb.onReadout(m.readout()); }
+  }
+  updateTags() {
+    const S = this.S, v = new THREE.Vector3(), camPos = this.cam.position, check = this.frame % 3 === 0;
+    Object.entries(this.cfg.parts).forEach(([pid, p]) => {
+      const tg = this.tags[pid], part = this.m.parts[pid];
+      v.set(p.tag[0] + part.position.x, p.tag[1] + part.position.y, p.tag[2] + part.position.z);
+      if (check) {
+        const dir = v.clone().sub(camPos), dist = dir.length(); this.ray.set(camPos, dir.normalize()); this.ray.far = dist - 0.04;
+        let occ = false;
+        for (const h of this.ray.intersectObjects(this.pick, false)) {
+          const hp = h.object.userData.pid; if (hp === pid) continue;
+          if (S.xray && this.m.parts[hp].userData.casing) continue; if (!h.object.visible) continue; occ = true; break;
+        }
+        this.ray.far = Infinity; tg.occ = occ;
+      }
+      v.project(this.cam);
+      const behind = v.z > 1, x = (v.x * 0.5 + 0.5) * this.W, y = (-v.y * 0.5 + 0.5) * this.H;
+      const dim = S.tourPart && S.tourPart !== pid;
+      const op = !S.tags || behind || tg.occ ? 0 : dim ? 0.25 : 1;
+      tg.el.style.transform = `translate(${(x - 10).toFixed(1)}px,${(y - 11).toFixed(1)}px)`;
+      if (tg.op !== op) { tg.op = op; tg.el.style.opacity = op; tg.el.style.pointerEvents = op < 0.5 ? 'none' : 'auto'; }
+      const cls = 'tag' + (S.sel === pid ? ' sel' : '') + (S.fault && this.cfg.faults[S.fault].part === pid ? ' fault' : '');
+      if (cls !== tg.cls) { tg.cls = cls; tg.el.className = cls; }
+    });
+  }
+  destroy() { cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); }
+}
+/* ============================ REACT UI ============================ */
+const html = htm.bind(React.createElement);
+const { useState, useEffect, useRef, useCallback } = React;
+
+function Slider({ id, label, value, min, max, onChange }) {
+  return html`<div className="grp">
+    <label className="lbl" htmlFor=${id}>${label}</label>
+    <input id=${id} type="range" min=${min} max=${max} value=${value} onChange=${e => onChange(+e.target.value)} />
+    <span className="val">${value}%</span></div>`;
+}
+
+function App() {
+  const canvasRef = useRef(null), tagsRef = useRef(null), studio = useRef(null);
+  const [mid, setMid] = useState('motor');
+  const [sel, setSel] = useState(null);
+  const [tour, setTour] = useState(null);
+  const [fault, setFault] = useState('');
+  const [explode, setExplode] = useState(0);
+  const [xray, setXray] = useState(false);
+  const [tags, setTags] = useState(true);
+  const [running, setRunning] = useState(true);
+  const [speed, setSpeed] = useState(60);
+  const [readout, setReadout] = useState('');
+  const cfg = CONFIG[mid];
+
+  const pick = useCallback(id => { setTour(null); setSel(id); }, []);
+  useEffect(() => {
+    const s = studio.current = new Studio(canvasRef.current, tagsRef.current, { onPick: pick, onReadout: setReadout });
+    s.setMachine('motor');
+    return () => s.destroy();
+  }, []);
+  // machine switch
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    studio.current.setMachine(mid); setSel(null); setTour(null); setFault('');
+  }, [mid]);
+  // push UI state to the engine
+  const tourPart = tour !== null ? cfg.tour[tour].part : null;
+  useEffect(() => {
+    const s = studio.current; if (!s) return;
+    s.S = { running, speed: speed / 100, explode: explode / 100, xray, tags, sel, tourPart, fault: fault || null };
+  }, [running, speed, explode, xray, tags, sel, tourPart, fault, mid]);
+  useEffect(() => { if (sel && studio.current && studio.current.cfg === cfg) studio.current.focus(sel); }, [sel]);
+  useEffect(() => { if (tour !== null) setSel(cfg.tour[tour].part); }, [tour]);
+  const onFault = id => { setFault(id); if (studio.current && studio.current.m) studio.current.m.reset(); if (id) { setTour(null); setSel(cfg.faults[id].part); } };
+  const resetCam = () => { studio.current.resetCamera(); setSel(null); setTour(null); };
+
+  const part = sel ? cfg.parts[sel] : null;
+  const fl = fault ? cfg.faults[fault] : null;
+  const tstep = tour !== null ? cfg.tour[tour] : null;
+
+  return html`<div className="app">
+    <header className="topbar flex items-center gap-4 flex-wrap">
+      <div className="brand"><i></i>Machine Anatomy Studio</div>
+      <div className="tabs" role="tablist" aria-label="Machine">
+        ${Object.entries(CONFIG).map(([id, m]) => html`<button key=${id} role="tab" aria-selected=${mid === id} className="tab" onClick=${() => setMid(id)}>${m.short}</button>`)}
+      </div>
+    </header>
+    <div className="main">
+      <section className="stage">
+        <canvas ref=${canvasRef} aria-label="3D model viewport"></canvas>
+        <div className="tags" ref=${tagsRef}></div>
+        <div className="hint">DRAG ORBIT · RIGHT-DRAG / SHIFT PAN · SCROLL ZOOM · CLICK A PART</div>
+        <div className="status flex gap-1.5">
+          <span className=${'chip ' + (running ? 'run' : '')}>${running ? '● RUNNING' : '❚❚ PAUSED'}</span>
+          ${readout ? html`<span className=${'chip ' + (fault ? 'bad' : '')}>${readout}</span>` : null}
+        </div>
+        <div className="dock">
+          <div className="grp">
+            <button className=${'btn ' + (running ? 'on' : '')} onClick=${() => setRunning(!running)}>${running ? 'Pause Simulation' : 'Run Simulation'}</button>
+          </div>
+          <${Slider} id="spd" label=${'Speed / Load'} value=${speed} min=${10} max=${100} onChange=${setSpeed} />
+          <${Slider} id="exp" label="Explode" value=${explode} min=${0} max=${100} onChange=${setExplode} />
+          <div className="grp">
+            <button className=${'btn ' + (xray ? 'on' : '')} aria-pressed=${xray} onClick=${() => setXray(!xray)}>X-Ray Casing</button>
+            <button className=${'btn ' + (tags ? 'on' : '')} aria-pressed=${tags} onClick=${() => setTags(!tags)}>${tags ? 'Hide Tags' : 'Show Tags'}</button>
+            <button className="btn" onClick=${resetCam}>Reset Camera</button>
+          </div>
+          <div className="grp">
+            <button className=${'btn amber ' + (tour !== null ? 'on' : '')} onClick=${() => { if (tour === null) { setFault(''); setTour(0); } else setTour(null); }}>${tour === null ? 'Start Tour' : 'Stop Tour'}</button>
+            <label className="lbl" htmlFor="flt">Simulate Fault</label>
+            <select id="flt" value=${fault} onChange=${e => onFault(e.target.value)}>
+              <option value="">No fault</option>
+              ${Object.entries(cfg.faults).map(([id, f]) => html`<option key=${id} value=${id}>${f.name}</option>`)}
+            </select>
+          </div>
+        </div>
+      </section>
+      <aside className="side" aria-label="Engineering panel">
+        <div className="sec">
+          <div className="eyebrow">Machine</div>
+          <h2>${cfg.name}</h2>
+          <div className="partlist">
+            ${Object.entries(cfg.parts).map(([id, p]) => html`<button key=${id} className="pl" style=${sel === id ? { color: 'var(--cyan)', borderColor: 'var(--cyan)' } : null} onClick=${() => pick(id)}>${p.name}</button>`)}
+          </div>
+        </div>
+        ${tstep ? html`<div className="sec tour">
+          <div className="eyebrow amber">Guided tour · Step ${tour + 1} of ${cfg.tour.length}</div>
+          <h2>${tstep.title}</h2>
+          <p>${tstep.text}</p>
+          <div className="dots">${cfg.tour.map((_, i) => html`<i key=${i} className=${i <= tour ? 'd' : ''}></i>`)}</div>
+          <div className="row flex gap-2 mt-3">
+            <button className="btn" disabled=${tour === 0} style=${{ opacity: tour === 0 ? 0.4 : 1 }} onClick=${() => setTour(Math.max(0, tour - 1))}>← Previous</button>
+            <button className="btn amber" onClick=${() => tour < cfg.tour.length - 1 ? setTour(tour + 1) : setTour(null)}>${tour < cfg.tour.length - 1 ? 'Next →' : 'Finish'}</button>
+          </div>
+        </div>` : null}
+        ${fl ? html`<div className="sec" style=${{ background: 'linear-gradient(180deg,rgba(255,77,90,.10),transparent)' }}>
+          <div className="eyebrow red">Fault diagnostics</div>
+          <h2>${fl.name}</h2>
+          <p>Affected part: <b style=${{ color: '#ffd5d8' }}>${cfg.parts[fl.part].name}</b></p>
+          <h3>Symptoms</h3><ul className="sym">${fl.symptoms.map((s, i) => html`<li key=${i}>${s}</li>`)}</ul>
+          <h3>Repair steps</h3><ol className="steps">${fl.repair.map((s, i) => html`<li key=${i}>${s}</li>`)}</ol>
+        </div>` : null}
+        <div className="sec" style=${{ borderBottom: 0 }}>
+          ${part ? html`<div>
+            <div className="eyebrow">${part.cat}</div>
+            <h2>${part.name}</h2>
+            <h3>Operating principle</h3><p>${part.principle}</p>
+            <h3>Engineering function</h3><p>${part.fn}</p>
+            <h3>Key specifications</h3>
+            <table className="specs"><tbody>${part.specs.map((r, i) => html`<tr key=${i}><td>${r[0]}</td><td>${r[1]}</td></tr>`)}</tbody></table>
+          </div>` : html`<div>
+            <div className="eyebrow">Part inspector</div>
+            <h2>Select a part</h2>
+            <p>Click any part in the 3D view, any floating tag, or a name above. The camera will fly to it and its principle, function and specifications will appear here.</p>
+          </div>`}
+        </div>
+      </aside>
+    </div>
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+
+</script>
+
+</body></html>
