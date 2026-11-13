@@ -1,100 +1,226 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Interactive 3D explorer for electrical machines and circuit boards">
 <title>Machine Anatomy Studio</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script>tailwind.config={corePlugins:{preflight:false}};</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-/* Layout: full-height studio. Top bar (machine tabs) / 3D viewport with floating control dock / right engineering sidebar. Stacks on phones. */
+/* Layout: the 3D canvas fills the window; a frosted-glass top pill, control dock and engineering panel float over it. Stacks on phones. */
+@property --ang{syntax:"<angle>";inherits:false;initial-value:0deg}
 :root{
-  --bg:#0a1017; --panel:#0f1720; --panel2:#142030; --line:#223244;
-  --fg:#d6e2ee; --muted:#7e93a8; --cyan:#35d6e8; --amber:#f5a524; --red:#ff4d5a; --green:#4ade80;
+  --bg:#0F172A; --fg:#e8eef8; --muted:#94a7c2; --line:rgba(255,255,255,.16);
+  --cyan:#38bdf8; --amber:#f5b041; --red:#ff6b7a; --green:#4ade80;
+  --g1:#4285f4; --g2:#9b72cb; --g3:#d96570; --g4:#38bdf8;
+  --r:28px; --side:380px; --spring:cubic-bezier(.34,1.56,.64,1);
   --display:'Space Grotesk',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:13px;overflow:hidden;
-  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:13px;overflow:hidden}
 #root{height:100%}
-.app{height:100%;display:flex;flex-direction:column;min-height:0}
-.topbar{display:flex;align-items:center;gap:16px;padding:10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
-.brand{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;display:flex;align-items:center;gap:8px;white-space:nowrap}
-.brand i{width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
-.tab{font-family:var(--display);font-weight:600;font-size:13px;padding:7px 12px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
-.tab:hover{color:var(--fg);border-color:#35506a}
-.tab[aria-selected=true]{color:#04222a;background:var(--cyan);border-color:var(--cyan)}
-.main{flex:1;display:flex;min-height:0}
-.stage{position:relative;flex:1;min-width:0;min-height:0;background:radial-gradient(ellipse at 50% 35%,#16222f 0%,#0a1017 70%)}
+button,select,input{font:inherit;color:inherit}
+.app{position:relative;height:100%;overflow:hidden}
+
+/* ---------- frosted glass ---------- */
+.glass{background:linear-gradient(160deg,rgba(255,255,255,.11),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:0 18px 50px rgba(2,6,23,.45),inset 0 1px 0 rgba(255,255,255,.22)}
+.card{border-radius:var(--r);padding:16px;background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03));
+  border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 24px rgba(2,6,23,.25)}
+
+/* ---------- stage ---------- */
+.stage{position:absolute;inset:0;overflow:hidden;
+  background:radial-gradient(1100px 700px at 38% 28%,#1b2c57 0%,transparent 62%),radial-gradient(900px 600px at 88% 95%,#2b1c52 0%,transparent 62%),var(--bg)}
+.stage::before,.stage::after{content:"";position:absolute;border-radius:50%;pointer-events:none;animation:drift 20s ease-in-out infinite alternate}
+.stage::before{width:560px;height:560px;left:6%;top:8%;background:radial-gradient(circle,rgba(66,133,244,.22),transparent 65%)}
+.stage::after{width:520px;height:520px;right:22%;bottom:4%;background:radial-gradient(circle,rgba(155,114,203,.2),transparent 65%);animation-duration:26s;animation-direction:alternate-reverse}
+@keyframes drift{to{transform:translate3d(60px,-40px,0) scale(1.15)}}
 .stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .stage canvas:active{cursor:grabbing}
 .tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+
+/* ---------- top pill ---------- */
+.topbar{position:absolute;z-index:5;top:12px;left:12px;max-width:calc(100% - var(--side) - 36px);display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px 10px 8px 18px;border-radius:9999px}
+.brand{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.01em;display:flex;align-items:center;gap:9px;white-space:nowrap}
+.brand i{width:11px;height:11px;border-radius:50%;background:conic-gradient(var(--g1),var(--g2),var(--g3),var(--g4),var(--g1));box-shadow:0 0 12px rgba(66,133,244,.8);animation:spin 4s linear infinite}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+
+/* ---------- bubbly pill buttons ---------- */
+.btn,.tab,.seg{position:relative;cursor:pointer;white-space:nowrap;border-radius:9999px;border:1px solid rgba(255,255,255,.22);color:var(--fg);
+  font-weight:600;font-size:12px;padding:9px 16px;line-height:1.1;
+  background:linear-gradient(180deg,rgba(255,255,255,.36),rgba(255,255,255,0)) 50% 3px/84% 46% no-repeat,
+             linear-gradient(180deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 55%,rgba(255,255,255,.11));
+  backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.55),inset 0 -7px 12px rgba(2,6,23,.3),0 8px 18px rgba(2,6,23,.38)}
+.tab{font-family:var(--display);font-size:13px;padding:9px 16px}
+.btn.amber{color:#ffe7bd;background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,0)) 50% 3px/84% 46% no-repeat,linear-gradient(180deg,rgba(245,176,65,.34),rgba(245,176,65,.1))}
+.btn.on,.tab[aria-selected=true],.seg[aria-selected=true]{color:#fff;
+  background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0)) 50% 3px/84% 46% no-repeat,linear-gradient(180deg,rgba(66,133,244,.6),rgba(56,189,248,.28))}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.tab:focus-visible,.seg:focus-visible,.pcard:focus-visible,select:focus-visible,input:focus-visible,.tag:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+/* ---------- Gemini-style moving glow ---------- */
+.glow::before,.btn.on::before,.tab[aria-selected=true]::before,.seg[aria-selected=true]::before,.pcard.on::before{
+  content:"";position:absolute;inset:-2px;border-radius:inherit;padding:2px;pointer-events:none;
+  background:conic-gradient(from var(--ang),var(--g1),var(--g2),var(--g3),var(--g4),var(--g1));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude;
+  animation:spin 3.2s linear infinite}
+.glow::after,.btn.on::after,.tab[aria-selected=true]::after,.seg[aria-selected=true]::after,.pcard.on::after{
+  content:"";position:absolute;inset:-14px;border-radius:inherit;padding:14px;pointer-events:none;opacity:.6;filter:blur(10px);
+  background:conic-gradient(from var(--ang),var(--g1),var(--g2),var(--g3),var(--g4),var(--g1));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask-composite:exclude;
+  animation:spin 3.2s linear infinite}
+.glow:disabled::before,.glow:disabled::after{display:none}
+@keyframes spin{to{--ang:360deg}}
+
+/* ---------- jelly bounce + squish (spring) ---------- */
+.btn,.tab,.seg,.pl,.pcard,.tag{transition:scale .5s var(--spring),box-shadow .3s,background-color .3s,border-color .3s,opacity .25s}
+@keyframes jelly{0%{scale:1 1}22%{scale:1.14 .87}42%{scale:.92 1.11}62%{scale:1.05 .97}80%{scale:.99 1.02}100%{scale:1.04 1.04}}
+.btn:hover:not(:disabled),.tab:hover,.seg:hover,.pl:hover,.pcard:hover,.tag:hover{animation:jelly .75s var(--spring) both}
+.btn:active:not(:disabled),.tab:active,.seg:active,.pl:active,.pcard:active,.tag:active{animation:none;scale:.9 .85;transition:scale .1s ease-out}
+
+/* ---------- stagger entrance ---------- */
+@keyframes rise{from{opacity:0;translate:0 22px;scale:.92}to{opacity:1;translate:0 0;scale:1}}
+.enter{animation:rise .65s var(--spring) both;animation-delay:calc(var(--i,0)*75ms)}
+.stack{display:flex;flex-direction:column;gap:10px}
+
+/* ---------- 3D tags ---------- */
 .tag{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;white-space:nowrap;font-family:var(--mono);font-size:11px;line-height:1;
-  padding:5px 8px 5px 7px;border-radius:4px;background:rgba(10,16,23,.86);border:1px solid #2c445a;color:var(--fg);
-  display:flex;align-items:center;gap:6px;transition:opacity .25s,border-color .15s,background .15s;will-change:transform,opacity}
-.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
-.tag:hover{border-color:var(--cyan)}
-.tag.sel{background:var(--cyan);color:#04222a;border-color:var(--cyan)}
+  padding:6px 11px 6px 9px;border-radius:9999px;background:rgba(15,23,42,.74);border:1px solid rgba(255,255,255,.28);color:var(--fg);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 6px 14px rgba(2,6,23,.4);display:flex;align-items:center;gap:7px;will-change:transform,opacity}
+.tag::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.tag.sel{background:linear-gradient(180deg,#7dd3fc,#38bdf8);color:#04222a;border-color:#fff}
 .tag.sel::before{background:#04222a;box-shadow:none}
-.tag.fault{border-color:var(--red);color:#ffd5d8}
-.tag.fault::before{background:var(--red);box-shadow:0 0 6px var(--red)}
-.dock{position:absolute;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-  padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(15,23,32,.88);backdrop-filter:blur(6px)}
-.grp{display:flex;align-items:center;gap:8px;padding:0 6px;border-right:1px solid var(--line)}
-.grp:last-child{border-right:0}
-.btn{font-family:var(--body);font-weight:600;font-size:12px;padding:7px 11px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);cursor:pointer;white-space:nowrap}
-.btn:hover{border-color:var(--cyan)}
-.btn.on{background:rgba(53,214,232,.16);border-color:var(--cyan);color:var(--cyan)}
-.btn.amber{background:rgba(245,165,36,.14);border-color:var(--amber);color:var(--amber)}
-.btn:focus-visible,.tab:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.tag.fault{border-color:var(--red);color:#ffd5d8;background:rgba(120,20,40,.7)}
+.tag.fault::before{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+/* ---------- dock ---------- */
+.dock{position:absolute;z-index:4;left:12px;right:calc(var(--side) + 24px);bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;
+  padding:10px 14px;border-radius:var(--r)}
+.grp{display:flex;align-items:center;gap:8px;padding:0 4px;flex-wrap:wrap}
+.grp+.grp{padding-left:14px;border-left:1px solid rgba(255,255,255,.14)}
 .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
-.val{font-family:var(--mono);font-size:11px;color:var(--fg);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
-input[type=range]{accent-color:var(--cyan);width:96px}
-select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:12px;font-family:var(--body);max-width:210px}
-.hint{position:absolute;top:10px;left:12px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;pointer-events:none}
-.status{position:absolute;top:10px;right:12px;display:flex;gap:6px;pointer-events:none}
-.chip{font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:99px;border:1px solid var(--line);background:rgba(10,16,23,.8);color:var(--muted)}
-.chip.run{color:var(--green);border-color:#1f5a37}
-.chip.bad{color:#ffd5d8;border-color:var(--red);background:rgba(255,77,90,.18)}
-.side{width:360px;flex:none;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;display:flex;flex-direction:column}
-.sec{padding:16px;border-bottom:1px solid var(--line)}
+.val{font-family:var(--mono);font-size:11px;min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;width:104px;height:20px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:9px;border-radius:9999px;border:1px solid rgba(255,255,255,.18);
+  background:linear-gradient(90deg,#4285f4,#38bdf8) 0/var(--p,50%) 100% no-repeat,rgba(255,255,255,.1);box-shadow:inset 0 2px 4px rgba(2,6,23,.5)}
+input[type=range]::-moz-range-track{height:9px;border-radius:9999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.1);box-shadow:inset 0 2px 4px rgba(2,6,23,.5)}
+input[type=range]::-moz-range-progress{height:9px;border-radius:9999px;background:linear-gradient(90deg,#4285f4,#38bdf8)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-6.5px;border-radius:50%;border:1px solid rgba(255,255,255,.7);
+  background:radial-gradient(circle at 35% 28%,#fff 0,#dbeafe 28%,#7dd3fc 70%);box-shadow:inset 0 -3px 5px rgba(2,6,23,.3),0 4px 10px rgba(2,6,23,.5);transition:scale .4s var(--spring)}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;border:1px solid rgba(255,255,255,.7);background:radial-gradient(circle at 35% 28%,#fff,#7dd3fc);box-shadow:0 4px 10px rgba(2,6,23,.5)}
+input[type=range]:active::-webkit-slider-thumb{scale:1.25 .85}
+select{-webkit-appearance:none;appearance:none;cursor:pointer;border-radius:9999px;border:1px solid rgba(255,255,255,.22);padding:9px 34px 9px 16px;font-size:12px;font-weight:600;max-width:230px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23e8eef8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") right 14px center no-repeat,
+             linear-gradient(180deg,rgba(255,255,255,.36),rgba(255,255,255,0)) 50% 3px/84% 46% no-repeat,linear-gradient(180deg,rgba(255,255,255,.17),rgba(255,255,255,.05) 55%,rgba(255,255,255,.11));
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.55),inset 0 -7px 12px rgba(2,6,23,.3),0 8px 18px rgba(2,6,23,.38);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+select option{background:#0F172A;color:#e8eef8}
+
+/* ---------- overlays ---------- */
+.status{position:absolute;z-index:3;top:76px;left:16px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - var(--side) - 52px);pointer-events:none}
+.chip{font-family:var(--mono);font-size:10.5px;padding:6px 12px;border-radius:9999px;color:var(--muted);background:rgba(15,23,42,.6);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.chip.run{color:var(--green);border-color:rgba(74,222,128,.4)}
+.chip.bad{color:#ffd5d8;border-color:var(--red);background:rgba(255,77,90,.2)}
+.hint{position:absolute;z-index:3;top:112px;left:18px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;pointer-events:none;opacity:.8}
+
+/* ---------- side panel ---------- */
+.side{position:absolute;z-index:5;top:12px;right:12px;bottom:12px;width:var(--side);border-radius:var(--r);display:flex;flex-direction:column;gap:12px;padding:14px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
 .eyebrow.amber{color:var(--amber)} .eyebrow.red{color:var(--red)}
 h2{font-family:var(--display);font-size:20px;font-weight:700;margin:4px 0 2px;text-wrap:balance}
-h3{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
-p{margin:0;line-height:1.55;color:#bccbda;font-size:13px}
+h3{font-family:var(--display);font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+p{margin:0;line-height:1.55;color:#c6d3e6;font-size:13px}
 .specs{width:100%;border-collapse:collapse;font-size:12px}
-.specs td{padding:5px 0;border-bottom:1px dashed #1d2b3a;vertical-align:top}
+.specs td{padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.12);vertical-align:top}
 .specs td:first-child{color:var(--muted);padding-right:10px}
-.specs td:last-child{font-family:var(--mono);text-align:right;color:var(--fg)}
-ol.steps{margin:0;padding-left:18px;color:#bccbda;line-height:1.55;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.specs td:last-child{font-family:var(--mono);text-align:right}
+ol.steps{margin:0;padding-left:18px;color:#c6d3e6;line-height:1.55;font-size:13px;display:flex;flex-direction:column;gap:4px}
 ul.sym{margin:0;padding-left:18px;color:#ffd5d8;line-height:1.5;display:flex;flex-direction:column;gap:3px}
-.tour{background:linear-gradient(180deg,rgba(245,165,36,.09),transparent)}
+.tourcard{background:linear-gradient(180deg,rgba(245,176,65,.16),rgba(255,255,255,.03))}
+.faultcard{background:linear-gradient(180deg,rgba(255,107,122,.17),rgba(255,255,255,.03))}
 .dots{display:flex;gap:4px;margin:10px 0}
-.dots i{flex:1;height:3px;border-radius:2px;background:var(--line)} .dots i.d{background:var(--amber)}
-.row{display:flex;gap:8px;margin-top:12px}
+.dots i{flex:1;height:4px;border-radius:9999px;background:rgba(255,255,255,.14)} .dots i.d{background:var(--amber)}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.segs{display:flex;gap:4px;padding:4px;border-radius:9999px;background:rgba(2,6,23,.35);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 2px 6px rgba(2,6,23,.5)}
+.seg{flex:1;padding:8px 6px;font-size:11.5px;box-shadow:none;background:transparent;border-color:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;color:var(--muted)}
+.seg[aria-selected=true]{box-shadow:inset 0 1.5px 0 rgba(255,255,255,.55),inset 0 -6px 10px rgba(2,6,23,.3),0 6px 14px rgba(2,6,23,.35);border-color:rgba(255,255,255,.3)}
+
+/* ---------- photo upload + scanner ---------- */
+.drop{border-radius:var(--r);padding:14px;border:2px dashed rgba(255,255,255,.28);background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));transition:border-color .25s,background .25s,scale .5s var(--spring)}
+.drop.over{border-color:var(--cyan);background:rgba(56,189,248,.12);scale:1.02}
+.drop .empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;text-align:center;color:var(--muted)}
+.drop svg{width:38px;height:38px;stroke:var(--cyan);fill:none;stroke-width:1.6}
+.photo{position:relative;border-radius:22px;overflow:hidden;aspect-ratio:16/10;background:#0b1224;border:1px solid rgba(255,255,255,.2)}
+.photo img{width:100%;height:100%;object-fit:cover;display:block;transition:filter .6s}
+.photo.scanning img{filter:saturate(.5) contrast(1.15) brightness(.8)}
+.scan{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s}
+.photo.scanning .scan,.photo.done .scan{opacity:1}
+.scan .grid{position:absolute;inset:0;background:linear-gradient(rgba(56,189,248,.28) 1px,transparent 1px) 0 0/24px 24px,linear-gradient(90deg,rgba(56,189,248,.28) 1px,transparent 1px) 0 0/24px 24px;
+  mix-blend-mode:screen;-webkit-mask:radial-gradient(ellipse at center,#000 40%,transparent 100%);mask:radial-gradient(ellipse at center,#000 40%,transparent 100%)}
+.photo.done .scan .grid{opacity:.35}
+.scan .laser{position:absolute;inset:0;transform:translateY(-100%);opacity:0;background:linear-gradient(to bottom,transparent 55%,rgba(56,189,248,.22) 93%,rgba(125,211,252,.85) 99%,#fff 100%);border-bottom:2px solid #7dd3fc;box-shadow:0 6px 22px 4px rgba(56,189,248,.8)}
+.photo.scanning .laser{opacity:1;animation:sweep 1.5s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes sweep{0%{transform:translateY(-100%)}100%{transform:translateY(0)}}
+.scan .corner{position:absolute;width:22px;height:22px;border:2px solid #7dd3fc;border-radius:6px;filter:drop-shadow(0 0 6px #38bdf8)}
+.scan .c1{top:8px;left:8px;border-right:0;border-bottom:0}.scan .c2{top:8px;right:8px;border-left:0;border-bottom:0}
+.scan .c3{bottom:8px;left:8px;border-right:0;border-top:0}.scan .c4{bottom:8px;right:8px;border-left:0;border-top:0}
+.scan .blip{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #7dd3fc;background:rgba(56,189,248,.35);translate:-50% -50%;animation:blip 1.6s ease-out infinite;animation-delay:calc(var(--d,0)*.25s)}
+@keyframes blip{0%{scale:.3;opacity:1}100%{scale:2.4;opacity:0}}
+.scan .read{position:absolute;left:10px;bottom:10px;font-family:var(--mono);font-size:10.5px;padding:5px 10px;border-radius:9999px;color:#e0f2fe;background:rgba(2,6,23,.7);border:1px solid rgba(125,211,252,.5)}
+.bar{height:5px;border-radius:9999px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4))}
+.note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.45}
+
+/* ---------- parts, dos/don'ts, care ---------- */
+.pcard{position:relative;display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;cursor:pointer;border-radius:var(--r);padding:12px 16px 12px 12px;
+  border:1px solid rgba(255,255,255,.16);background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03));box-shadow:inset 0 1.5px 0 rgba(255,255,255,.25),inset 0 -6px 12px rgba(2,6,23,.25),0 6px 16px rgba(2,6,23,.3)}
+.pcard.on{border-color:transparent}
+.pidx{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:500;background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.5),rgba(66,133,244,.45) 60%);border:1px solid rgba(255,255,255,.35)}
+.ptxt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ptxt b{font-family:var(--display);font-size:13.5px}
+.ptxt small{color:var(--muted);font-size:11px}
+.ptxt em{font-style:normal;color:#c6d3e6;font-size:12px;line-height:1.45;margin-top:4px}
+.note-card{display:flex;gap:12px;align-items:flex-start;border-radius:var(--r);padding:13px 16px 13px 13px;border:1px solid rgba(255,255,255,.16);line-height:1.45;font-size:12.5px;color:#dbe6f5}
+.note-card.do{background:linear-gradient(160deg,rgba(74,222,128,.16),rgba(255,255,255,.03))}
+.note-card.dont{background:linear-gradient(160deg,rgba(255,107,122,.17),rgba(255,255,255,.03))}
+.ico{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;box-shadow:inset 0 1.5px 0 rgba(255,255,255,.5),inset 0 -3px 5px rgba(2,6,23,.3)}
+.do .ico{background:linear-gradient(#6ee7a0,#22a85a);color:#04210f}.dont .ico{background:linear-gradient(#ff98a3,#d9384d);color:#2a040a}
+.care-card{border-radius:var(--r);padding:14px 16px;border:1px solid rgba(255,255,255,.16);background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03))}
+.every{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:9999px;color:#bfe3ff;background:rgba(66,133,244,.25);border:1px solid rgba(125,180,255,.4)}
+.care-card b{display:block;font-family:var(--display);font-size:14px;margin:8px 0 3px}
+.care-card p{font-size:12.5px}
+.sub{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:2px 6px}
 .partlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.pl{font-size:11px;padding:4px 8px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
-.pl:hover{color:var(--fg);border-color:var(--cyan)}
-@media (max-width:860px){
+
+/* ---------- phones ---------- */
+@media (max-width:1000px){
   body{overflow:auto} html,body,#root{height:auto;min-height:100%}
-  .app{height:auto}
-  .main{flex-direction:column}
-  .stage{height:74vh;min-height:460px;flex:none}
-  .side{width:auto;border-left:0;border-top:1px solid var(--line);overflow:visible}
-  .dock{left:8px;right:8px;padding:6px}
-  .grp{border-right:0;padding:0 2px}
-  input[type=range]{width:80px}
-  .hint{display:none}
+  .app{height:auto;overflow:visible;display:flex;flex-direction:column}
+  .topbar{position:relative;top:auto;left:auto;max-width:none;margin:10px 10px 0;border-radius:var(--r);padding:10px 14px}
+  .stage{position:relative;inset:auto;height:78vh;min-height:520px;margin-top:10px}
+  .dock{left:8px;right:8px;padding:8px 10px}
+  .grp+.grp{border-left:0;padding-left:4px}
+  .status{top:10px;max-width:calc(100% - 24px)} .hint{display:none}
+  .side{position:relative;inset:auto;width:auto;margin:10px;overflow:visible}
+  input[type=range]{width:84px}
 }
-@media (prefers-reduced-motion:reduce){.tag{transition:none}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .enter{animation:none}
+}
 </style>
+</head>
+<body>
 <div id="root"></div>
 <script>
 /* ============================================================
@@ -264,6 +390,41 @@ const CONFIG = {
         repair: ["Reduce the load and check oil temperature.", "Clean external dust and debris from the fins.", "Open radiator valves and check for sludge in the oil.", "Flush or replace the radiator if the internal passage is blocked.", "Confirm temperature rise is back within limits."] }
     }
   }
+};
+
+/* ---- Per-machine guidance shown after "Analyze Machine": dos, don'ts and care schedule ---- */
+CONFIG.motor.guide = {
+  dos: ["Check the nameplate voltage, frequency and star/delta connection before wiring.", "Lock out and tag out the supply before opening the terminal box.", "Keep the fins and fan cover clear of dust so air can flow.", "Set the overload relay to the nameplate current.", "Align the coupling and set belt tension to keep bearing loads low."],
+  donts: ["Don't run the motor with the fan cover removed.", "Don't restart repeatedly after a trip. Find the cause first.", "Don't aim high-pressure water at bearings, seals or the terminal box.", "Don't over-grease the bearings. Excess grease makes them run hot.", "Don't exceed the rated load or the permitted number of starts per hour."],
+  care: [
+    { every: "Every visit", title: "Listen and feel", text: "Check for unusual noise, vibration and hot spots on the frame and end bells." },
+    { every: "Monthly", title: "Clean and tighten", text: "Clear dust from the fins and fan cover. Check terminal screws and mounting bolts are tight." },
+    { every: "3 to 6 months", title: "Grease the bearings", text: "Add the grease type and quantity shown on the nameplate. Wipe off any excess." },
+    { every: "Yearly", title: "Insulation test", text: "Megger each winding to earth. Readings should be well above 1 MΩ. Recheck coupling alignment." },
+    { every: "2 to 3 years", title: "Bearings and seals", text: "Inspect or replace bearings and seals, and check the fan for cracks." }
+  ]
+};
+CONFIG.pcb.guide = {
+  dos: ["Power the board from a 5 V source that can supply at least 500 mA.", "Touch grounded metal or use an ESD mat before handling it.", "Hold the board by its edges.", "Fit a decoupling capacitor close to the supply pin of any chip you add.", "Check polarity before fitting any extra electrolytic capacitor."],
+  donts: ["Don't apply more than 3.3 V to a GPIO pin unless it is listed as 5 V tolerant.", "Don't power the board from two sources at once without back-feed protection.", "Don't draw more than about 800 mA from the 3.3 V rail.", "Don't place the board on metal or a damp surface while powered.", "Don't flex the board or press down on the microcontroller."],
+  care: [
+    { every: "Before each use", title: "Visual check", text: "Look for bulged capacitors, scorch marks and a loose USB connector." },
+    { every: "Monthly", title: "Dust removal", text: "Brush dust off gently with a soft brush. Keep compressed air at a distance." },
+    { every: "As needed", title: "Clean flux and grime", text: "Use 99 % isopropyl alcohol and a lint-free swab. Let it dry fully before powering up." },
+    { every: "6 months", title: "Measure the rails", text: "Check the 3.3 V rail and its ripple. Ripple should stay under about 50 mV." },
+    { every: "Storage", title: "Keep it dry", text: "Store in an anti-static bag at room temperature with low humidity." }
+  ]
+};
+CONFIG.transformer.guide = {
+  dos: ["Check the oil level and temperature gauges at every visit.", "Keep bushing surfaces clean and look for cracks or tracking marks.", "Make sure the tank is earthed and earth resistance is within spec.", "Keep radiator fins clear of dust, nests and vegetation.", "Operate within the nameplate kVA and keep the load balanced."],
+  donts: ["Don't open the tank or take oil samples while the unit is energised.", "Don't overload it beyond the rated overload curve.", "Don't mix different oil types.", "Don't bypass the Buchholz or temperature trips.", "Don't paint over or block the radiator fins or the breather."],
+  care: [
+    { every: "Every visit", title: "Read the gauges", text: "Record oil temperature, oil level and load current. Note any change from last time." },
+    { every: "Monthly", title: "Leaks and breather", text: "Check gaskets, valves and bushings for oil. Check the silica-gel breather colour." },
+    { every: "Yearly", title: "Oil sample and thermal scan", text: "Test dielectric strength and dissolved gases. Tighten terminals and scan for hot joints." },
+    { every: "2 years", title: "Electrical tests", text: "Run insulation resistance and turns-ratio tests. Test the protection relays." },
+    { every: "5 years", title: "Tank and oil", text: "Treat corrosion and repaint the tank. Recondition the oil if tests call for it." }
+  ]
 };
 /* ============================ HELPERS ============================ */
 const TAU = Math.PI * 2;
@@ -708,7 +869,7 @@ class Studio {
     this.scene = new THREE.Scene();
     this.cam = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
     this.c = { target: new THREE.Vector3(), tTarget: new THREE.Vector3(), theta: 0, phi: 1, radius: 10, tTheta: 0, tPhi: 1, tRadius: 10 };
-    this.ray = new THREE.Raycaster(); this.ptrs = new Map(); this.tags = {}; this.exCur = 0; this.time = 0; this.frame = 0; this.hover = null; this.roTimer = 0;
+    this.ray = new THREE.Raycaster(); this.ptrs = new Map(); this.tags = {}; this.exCur = 0; this.exV = 0; this.xrCur = 0; this.inset = { x: 0, y: 0 }; this.time = 0; this.frame = 0; this.hover = null; this.roTimer = 0;
     this.buildEnvironment(); this.bind();
     this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(canvas.parentElement); this.resize();
     this.last = performance.now(); this.loop = this.loop.bind(this); this.raf = requestAnimationFrame(this.loop);
@@ -746,29 +907,34 @@ class Studio {
       el.addEventListener('click', e => { e.stopPropagation(); this.cb.onPick(pid); });
       this.tagLayer.appendChild(el); this.tags[pid] = { el, occ: false, vis: 1, cls: '' };
     });
-    this.exCur = 0; this.resetCamera(true);
+    this.exCur = 0; this.exV = 0; this.xrCur = 0; this.resetCamera(true);
   }
   resetCamera(snap) {
     const cc = this.cfg.camera, c = this.c; c.tTarget.set(...cc.target);
     const d = new THREE.Vector3(...cc.pos).sub(c.tTarget); c.tRadius = d.length(); c.tPhi = Math.acos(d.y / c.tRadius); c.tTheta = Math.atan2(d.x, d.z);
-    if (snap) { c.target.copy(c.tTarget); c.radius = c.tRadius; c.phi = c.tPhi; c.theta = c.tTheta; }
+    if (snap) { c.target.copy(c.tTarget); c.radius = c.tRadius; c.phi = c.tPhi; c.theta = c.tTheta; c.fly = null; } else this.startFly();
   }
+  startFly() { const c = this.c; c.fly = { t: 0, dur: 1.05, from: c.target.clone(), r0: c.radius, lift: 0.35 + Math.abs(c.tRadius - c.radius) * 0.12 }; }
+  stopFly() { const c = this.c; if (c.fly) { c.fly = null; c.tTarget.copy(c.target); c.tRadius = c.radius; } }
   focus(pid) {
     const p = this.m && this.m.parts[pid]; if (!p) return;
     this.scene.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(p), size = b.getSize(new THREE.Vector3());
-    this.c.tTarget.copy(b.getCenter(new THREE.Vector3())); this.c.tRadius = Math.min(16, Math.max(3.8, size.length() * 1.5 + 2.2));
+    this.c.tTarget.copy(b.getCenter(new THREE.Vector3())); this.c.tRadius = Math.min(16, Math.max(3.8, size.length() * 1.5 + 2.2)); this.startFly();
   }
+  setInset(x, y) { this.inset = { x, y }; this.resize(); }
   resize() {
     const el = this.canvas.parentElement, w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;
-    this.renderer.setSize(w, h, false); this.cam.aspect = w / h; this.cam.updateProjectionMatrix(); this.W = w; this.H = h;
+    this.renderer.setSize(w, h, false); this.cam.aspect = w / h; this.W = w; this.H = h;
+    const i = this.inset; if (i.x || i.y) this.cam.setViewOffset(w, h, i.x, i.y, w, h); else this.cam.clearViewOffset();
+    this.cam.updateProjectionMatrix();
   }
   /* ---- own orbit controls: rotate / pan / zoom with damping ---- */
   bind() {
     const el = this.canvas, c = this.c;
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
-      el.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.stopFly(); el.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       this.down = { moved: 0, btn: e.button, pan: e.button === 2 || e.shiftKey || e.ctrlKey || e.metaKey };
       if (this.ptrs.size === 2) this.pinch = this.pinchDist();
     });
@@ -789,7 +955,7 @@ class Studio {
       if (wasOne && this.down && this.down.moved < 5 && this.down.btn === 0 && e.type === 'pointerup') this.click(e);
     };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
-    el.addEventListener('wheel', e => { e.preventDefault(); c.tRadius = Math.min(32, Math.max(2.5, c.tRadius * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
+    el.addEventListener('wheel', e => { e.preventDefault(); this.stopFly(); c.tRadius = Math.min(32, Math.max(2.5, c.tRadius * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
   }
   pinchDist() { const a = [...this.ptrs.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
   pan(dx, dy) {
@@ -813,28 +979,41 @@ class Studio {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now; this.time += dt; this.frame++;
     if (!this.m) return;
     const S = this.S, m = this.m, parts = m.parts, c = this.c, t = this.time;
-    // explode (eased)
-    this.exCur += (S.explode - this.exCur) * (1 - Math.exp(-dt * 7));
+    // explode: underdamped spring, so parts glide apart with a soft overshoot and settle back
+    this.exV += ((S.explode - this.exCur) * 140 - this.exV * 16) * dt; this.exCur += this.exV * dt;
+    if (this.exCur < 0) { this.exCur = 0; this.exV = 0; }
     Object.entries(this.cfg.parts).forEach(([pid, p]) => parts[pid].position.set(p.explode[0] * this.exCur, p.explode[1] * this.exCur, p.explode[2] * this.exCur));
     m.update(S, dt, t);
-    // visual state per part
-    const extra = new THREE.Color();
+    // X-Ray glass fade + per-part dimming, all eased
+    this.xrCur += ((S.xray ? 1 : 0) - this.xrCur) * (1 - Math.exp(-dt * 6));
+    const extra = new THREE.Color(), ease = 1 - Math.exp(-dt * 7);
     Object.entries(parts).forEach(([pid, part]) => {
-      const dim = S.tourPart && S.tourPart !== pid ? 0.12 : 1, xr = S.xray && part.userData.casing ? 0.16 : 1;
+      const ud = part.userData, dimT = S.tourPart && S.tourPart !== pid ? 0.12 : 1;
+      ud.dimCur = (ud.dimCur === undefined ? 1 : ud.dimCur) + (dimT - (ud.dimCur === undefined ? 1 : ud.dimCur)) * ease;
+      const dim = ud.dimCur, glass = ud.casing ? this.xrCur : 0, xr = 1 - glass * 0.84;
       extra.setRGB(0, 0, 0);
       if (S.sel === pid) extra.addScaledVector(COL.cyan, 0.22 + 0.08 * Math.sin(t * 4)); else if (this.hover === pid) extra.addScaledVector(COL.cyan, 0.12);
       if (S.fault && this.cfg.faults[S.fault].part === pid) extra.addScaledVector(COL.red, 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(t * 6.5)));
-      part.userData.mats.forEach(mt => {
+      ud.mats.forEach(mt => {
         const op = mt.userData.baseOp * dim * xr, tr = op < 0.999 || mt.userData.baseTr;
         if (mt.transparent !== tr) { mt.transparent = tr; mt.needsUpdate = true; }
         mt.opacity = op; mt.depthWrite = op > 0.5;
-        if (mt.emissive && mt.userData.e) mt.emissive.copy(mt.userData.e).add(extra).multiplyScalar(dim === 1 ? 1 : 0.5);
+        if (mt.roughness !== undefined && (glass > 0.001 || mt.userData.glassOn)) {
+          if (mt.userData.rough0 === undefined) { mt.userData.rough0 = mt.roughness; mt.userData.metal0 = mt.metalness; }
+          mt.roughness = mt.userData.rough0 + (0.08 - mt.userData.rough0) * glass; mt.metalness = mt.userData.metal0 * (1 - glass * 0.7); mt.userData.glassOn = glass > 0.001;
+        }
+        if (mt.emissive && mt.userData.e) { mt.emissive.copy(mt.userData.e).add(extra).multiplyScalar(0.45 + 0.55 * dim); if (glass) mt.emissive.addScaledVector(COL.cyan, glass * 0.06); }
       });
     });
-    // camera ease
+    // camera: cinematic fly-to (ease in-out with a small pull-back), plus damped orbit
     const k = 1 - Math.exp(-dt * 6.5);
-    c.target.lerp(c.tTarget, k); c.radius += (c.tRadius - c.radius) * k; c.phi += (c.tPhi - c.phi) * k;
-    let dth = c.tTheta - c.theta; c.theta += dth * k;
+    if (c.fly) {
+      const f = c.fly; f.t = Math.min(1, f.t + dt / f.dur);
+      const e = f.t < 0.5 ? 4 * f.t * f.t * f.t : 1 - Math.pow(-2 * f.t + 2, 3) / 2;
+      c.target.lerpVectors(f.from, c.tTarget, e); c.radius = f.r0 + (c.tRadius - f.r0) * e + Math.sin(Math.PI * e) * f.lift;
+      if (f.t >= 1) c.fly = null;
+    } else { c.target.lerp(c.tTarget, k); c.radius += (c.tRadius - c.radius) * k; }
+    c.phi += (c.tPhi - c.phi) * k; c.theta += (c.tTheta - c.theta) * k;
     const sp = Math.sin(c.phi);
     this.cam.position.set(c.target.x + c.radius * sp * Math.sin(c.theta), c.target.y + c.radius * Math.cos(c.phi), c.target.z + c.radius * sp * Math.cos(c.theta));
     this.cam.lookAt(c.target); this.scene.updateMatrixWorld(true); this.cam.updateMatrixWorld();
@@ -871,16 +1050,19 @@ class Studio {
 /* ============================ REACT UI ============================ */
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useRef, useCallback } = React;
+const BLIPS = [[22, 30], [58, 24], [74, 52], [40, 62], [30, 78], [64, 76]];
 
 function Slider({ id, label, value, min, max, onChange }) {
+  const pct = ((value - min) / (max - min)) * 100;
   return html`<div className="grp">
     <label className="lbl" htmlFor=${id}>${label}</label>
-    <input id=${id} type="range" min=${min} max=${max} value=${value} onChange=${e => onChange(+e.target.value)} />
+    <input id=${id} type="range" min=${min} max=${max} value=${value} style=${{ '--p': pct + '%' }} onChange=${e => onChange(+e.target.value)} />
     <span className="val">${value}%</span></div>`;
 }
+const Enter = ({ i, children }) => html`<div className="enter" style=${{ '--i': i }}>${children}</div>`;
 
 function App() {
-  const canvasRef = useRef(null), tagsRef = useRef(null), studio = useRef(null);
+  const canvasRef = useRef(null), tagsRef = useRef(null), studio = useRef(null), fileRef = useRef(null), scanTimer = useRef(0);
   const [mid, setMid] = useState('motor');
   const [sel, setSel] = useState(null);
   const [tour, setTour] = useState(null);
@@ -891,117 +1073,185 @@ function App() {
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(60);
   const [readout, setReadout] = useState('');
+  const [tab, setTab] = useState('inspect');
+  const [photo, setPhoto] = useState(null);
+  const [drag, setDrag] = useState(false);
+  const [scan, setScan] = useState({ on: false, p: 0, done: false, run: 0 });
   const cfg = CONFIG[mid];
 
-  const pick = useCallback(id => { setTour(null); setSel(id); }, []);
+  const pick = useCallback(id => { setTour(null); setSel(id); setTab('inspect'); }, []);
+  const pickFromList = useCallback(id => { setTour(null); setSel(id); }, []);
   useEffect(() => {
     const s = studio.current = new Studio(canvasRef.current, tagsRef.current, { onPick: pick, onReadout: setReadout });
     s.setMachine('motor');
-    return () => s.destroy();
+    const fit = () => { const d = window.innerWidth > 1000; s.setInset(d ? 202 : 0, d ? 44 : 0); };
+    fit(); window.addEventListener('resize', fit);
+    return () => { window.removeEventListener('resize', fit); clearInterval(scanTimer.current); s.destroy(); };
   }, []);
-  // machine switch
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    studio.current.setMachine(mid); setSel(null); setTour(null); setFault('');
+    studio.current.setMachine(mid); setSel(null); setTour(null); setFault(''); setScan(s => ({ on: false, p: 0, done: false, run: s.run }));
+    clearInterval(scanTimer.current);
   }, [mid]);
-  // push UI state to the engine
   const tourPart = tour !== null ? cfg.tour[tour].part : null;
   useEffect(() => {
     const s = studio.current; if (!s) return;
     s.S = { running, speed: speed / 100, explode: explode / 100, xray, tags, sel, tourPart, fault: fault || null };
   }, [running, speed, explode, xray, tags, sel, tourPart, fault, mid]);
   useEffect(() => { if (sel && studio.current && studio.current.cfg === cfg) studio.current.focus(sel); }, [sel]);
-  useEffect(() => { if (tour !== null) setSel(cfg.tour[tour].part); }, [tour]);
-  const onFault = id => { setFault(id); if (studio.current && studio.current.m) studio.current.m.reset(); if (id) { setTour(null); setSel(cfg.faults[id].part); } };
+  useEffect(() => { if (tour !== null) { setSel(cfg.tour[tour].part); setTab('inspect'); } }, [tour]);
+  const onFault = id => { setFault(id); if (studio.current && studio.current.m) studio.current.m.reset(); if (id) { setTour(null); setSel(cfg.faults[id].part); setTab('inspect'); } };
   const resetCam = () => { studio.current.resetCamera(); setSel(null); setTour(null); };
 
-  const part = sel ? cfg.parts[sel] : null;
-  const fl = fault ? cfg.faults[fault] : null;
-  const tstep = tour !== null ? cfg.tour[tour] : null;
+  /* ----- photo upload + simulated scan ----- */
+  const loadFile = f => {
+    if (!f || !/^image\//.test(f.type)) return;
+    if (photo) URL.revokeObjectURL(photo.url);
+    clearInterval(scanTimer.current);
+    setPhoto({ url: URL.createObjectURL(f), name: f.name }); setScan(s => ({ on: false, p: 0, done: false, run: s.run }));
+  };
+  const analyze = () => {
+    if (!photo || scan.on) return;
+    setScan(s => ({ on: true, p: 0, done: false, run: s.run })); const t0 = performance.now();
+    scanTimer.current = setInterval(() => {
+      const p = Math.min(1, (performance.now() - t0) / 3000);
+      if (p >= 1) { clearInterval(scanTimer.current); setScan(s => ({ on: false, p: 1, done: true, run: s.run + 1 })); setTab('parts'); }
+      else setScan(s => ({ ...s, p }));
+    }, 60);
+  };
+
+  const part = sel ? cfg.parts[sel] : null, fl = fault ? cfg.faults[fault] : null, tstep = tour !== null ? cfg.tour[tour] : null;
+  const g = cfg.guide, pk = Object.entries(cfg.parts);
+  const photoCls = 'photo' + (scan.on ? ' scanning' : '') + (scan.done ? ' done' : '');
+  const TABS = [['inspect', 'Inspector'], ['parts', 'Parts'], ['dos', 'Dos & Don’ts'], ['care', 'Care']];
+  const key = tab + '-' + scan.run + '-' + mid;
 
   return html`<div className="app">
-    <header className="topbar flex items-center gap-4 flex-wrap">
+    <header className="topbar glass">
       <div className="brand"><i></i>Machine Anatomy Studio</div>
       <div className="tabs" role="tablist" aria-label="Machine">
         ${Object.entries(CONFIG).map(([id, m]) => html`<button key=${id} role="tab" aria-selected=${mid === id} className="tab" onClick=${() => setMid(id)}>${m.short}</button>`)}
       </div>
     </header>
-    <div className="main">
-      <section className="stage">
-        <canvas ref=${canvasRef} aria-label="3D model viewport"></canvas>
-        <div className="tags" ref=${tagsRef}></div>
-        <div className="hint">DRAG ORBIT · RIGHT-DRAG / SHIFT PAN · SCROLL ZOOM · CLICK A PART</div>
-        <div className="status flex gap-1.5">
-          <span className=${'chip ' + (running ? 'run' : '')}>${running ? '● RUNNING' : '❚❚ PAUSED'}</span>
-          ${readout ? html`<span className=${'chip ' + (fault ? 'bad' : '')}>${readout}</span>` : null}
+    <section className="stage">
+      <canvas ref=${canvasRef} aria-label="3D model viewport"></canvas>
+      <div className="tags" ref=${tagsRef}></div>
+      <div className="status">
+        <span className=${'chip ' + (running ? 'run' : '')}>${running ? '● RUNNING' : '❚❚ PAUSED'}</span>
+        ${readout ? html`<span className=${'chip ' + (fault ? 'bad' : '')}>${readout}</span>` : null}
+      </div>
+      <div className="hint">DRAG ORBIT · RIGHT-DRAG / SHIFT PAN · SCROLL ZOOM · CLICK A PART</div>
+      <div className="dock glass">
+        <div className="grp"><button className=${'btn ' + (running ? 'on' : '')} onClick=${() => setRunning(!running)}>${running ? 'Pause Simulation' : 'Run Simulation'}</button></div>
+        <${Slider} id="spd" label="Speed / Load" value=${speed} min=${10} max=${100} onChange=${setSpeed} />
+        <div className="grp">
+          <button className=${'btn glow ' + (explode > 5 ? 'on' : '')} aria-pressed=${explode > 5} onClick=${() => setExplode(explode > 5 ? 0 : 100)}>Exploded View</button>
         </div>
-        <div className="dock">
-          <div className="grp">
-            <button className=${'btn ' + (running ? 'on' : '')} onClick=${() => setRunning(!running)}>${running ? 'Pause Simulation' : 'Run Simulation'}</button>
-          </div>
-          <${Slider} id="spd" label=${'Speed / Load'} value=${speed} min=${10} max=${100} onChange=${setSpeed} />
-          <${Slider} id="exp" label="Explode" value=${explode} min=${0} max=${100} onChange=${setExplode} />
-          <div className="grp">
-            <button className=${'btn ' + (xray ? 'on' : '')} aria-pressed=${xray} onClick=${() => setXray(!xray)}>X-Ray Casing</button>
-            <button className=${'btn ' + (tags ? 'on' : '')} aria-pressed=${tags} onClick=${() => setTags(!tags)}>${tags ? 'Hide Tags' : 'Show Tags'}</button>
-            <button className="btn" onClick=${resetCam}>Reset Camera</button>
-          </div>
-          <div className="grp">
-            <button className=${'btn amber ' + (tour !== null ? 'on' : '')} onClick=${() => { if (tour === null) { setFault(''); setTour(0); } else setTour(null); }}>${tour === null ? 'Start Tour' : 'Stop Tour'}</button>
-            <label className="lbl" htmlFor="flt">Simulate Fault</label>
-            <select id="flt" value=${fault} onChange=${e => onFault(e.target.value)}>
-              <option value="">No fault</option>
-              ${Object.entries(cfg.faults).map(([id, f]) => html`<option key=${id} value=${id}>${f.name}</option>`)}
-            </select>
-          </div>
+        <${Slider} id="exp" label="Explode" value=${explode} min=${0} max=${100} onChange=${setExplode} />
+        <div className="grp">
+          <button className=${'btn ' + (xray ? 'on' : '')} aria-pressed=${xray} onClick=${() => setXray(!xray)}>X-Ray Glass</button>
+          <button className=${'btn ' + (tags ? 'on' : '')} aria-pressed=${tags} onClick=${() => setTags(!tags)}>${tags ? 'Hide Tags' : 'Show Tags'}</button>
+          <button className="btn" onClick=${resetCam}>Reset Camera</button>
         </div>
-      </section>
-      <aside className="side" aria-label="Engineering panel">
-        <div className="sec">
-          <div className="eyebrow">Machine</div>
-          <h2>${cfg.name}</h2>
-          <div className="partlist">
-            ${Object.entries(cfg.parts).map(([id, p]) => html`<button key=${id} className="pl" style=${sel === id ? { color: 'var(--cyan)', borderColor: 'var(--cyan)' } : null} onClick=${() => pick(id)}>${p.name}</button>`)}
-          </div>
+        <div className="grp">
+          <button className=${'btn amber ' + (tour !== null ? 'on' : '')} onClick=${() => { if (tour === null) { setFault(''); setTour(0); } else setTour(null); }}>${tour === null ? 'Start Tour' : 'Stop Tour'}</button>
+          <label className="lbl" htmlFor="flt">Simulate Fault</label>
+          <select id="flt" value=${fault} onChange=${e => onFault(e.target.value)}>
+            <option value="">No fault</option>
+            ${Object.entries(cfg.faults).map(([id, f]) => html`<option key=${id} value=${id}>${f.name}</option>`)}
+          </select>
         </div>
-        ${tstep ? html`<div className="sec tour">
-          <div className="eyebrow amber">Guided tour · Step ${tour + 1} of ${cfg.tour.length}</div>
-          <h2>${tstep.title}</h2>
-          <p>${tstep.text}</p>
-          <div className="dots">${cfg.tour.map((_, i) => html`<i key=${i} className=${i <= tour ? 'd' : ''}></i>`)}</div>
-          <div className="row flex gap-2 mt-3">
-            <button className="btn" disabled=${tour === 0} style=${{ opacity: tour === 0 ? 0.4 : 1 }} onClick=${() => setTour(Math.max(0, tour - 1))}>← Previous</button>
-            <button className="btn amber" onClick=${() => tour < cfg.tour.length - 1 ? setTour(tour + 1) : setTour(null)}>${tour < cfg.tour.length - 1 ? 'Next →' : 'Finish'}</button>
+      </div>
+    </section>
+    <aside className="side glass" aria-label="Engineering panel">
+      <div className="card">
+        <div className="eyebrow">Machine</div>
+        <h2>${cfg.name}</h2>
+        <p>Upload a photo of your machine, then run the analysis to open its parts list, dos and don'ts and care schedule.</p>
+      </div>
+
+      <div className=${'drop' + (drag ? ' over' : '')}
+        onDragOver=${e => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)}
+        onDrop=${e => { e.preventDefault(); setDrag(false); loadFile(e.dataTransfer.files[0]); }}>
+        <input ref=${fileRef} type="file" accept="image/*" hidden onChange=${e => { loadFile(e.target.files[0]); e.target.value = ''; }} />
+        ${photo ? html`<div className=${photoCls}>
+          <img src=${photo.url} alt="Uploaded machine photo" />
+          <div className="scan" aria-hidden="true">
+            <div className="grid"></div><div className="laser"></div>
+            <i className="corner c1"></i><i className="corner c2"></i><i className="corner c3"></i><i className="corner c4"></i>
+            ${scan.on ? BLIPS.map((b, i) => scan.p > i / BLIPS.length ? html`<i key=${i} className="blip" style=${{ left: b[0] + '%', top: b[1] + '%', '--d': i }}></i>` : null) : null}
+            <div className="read">${scan.on ? `SCANNING ${Math.round(scan.p * 100)}%` : '✓ SCAN COMPLETE'}</div>
           </div>
-        </div>` : null}
-        ${fl ? html`<div className="sec" style=${{ background: 'linear-gradient(180deg,rgba(255,77,90,.10),transparent)' }}>
-          <div className="eyebrow red">Fault diagnostics</div>
-          <h2>${fl.name}</h2>
-          <p>Affected part: <b style=${{ color: '#ffd5d8' }}>${cfg.parts[fl.part].name}</b></p>
-          <h3>Symptoms</h3><ul className="sym">${fl.symptoms.map((s, i) => html`<li key=${i}>${s}</li>`)}</ul>
-          <h3>Repair steps</h3><ol className="steps">${fl.repair.map((s, i) => html`<li key=${i}>${s}</li>`)}</ol>
-        </div>` : null}
-        <div className="sec" style=${{ borderBottom: 0 }}>
-          ${part ? html`<div>
-            <div className="eyebrow">${part.cat}</div>
-            <h2>${part.name}</h2>
-            <h3>Operating principle</h3><p>${part.principle}</p>
-            <h3>Engineering function</h3><p>${part.fn}</p>
-            <h3>Key specifications</h3>
-            <table className="specs"><tbody>${part.specs.map((r, i) => html`<tr key=${i}><td>${r[0]}</td><td>${r[1]}</td></tr>`)}</tbody></table>
-          </div>` : html`<div>
-            <div className="eyebrow">Part inspector</div>
-            <h2>Select a part</h2>
-            <p>Click any part in the 3D view, any floating tag, or a name above. The camera will fly to it and its principle, function and specifications will appear here.</p>
-          </div>`}
+        </div>` : html`<div className="empty">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <div>Drop a machine photo here</div></div>`}
+        ${scan.on ? html`<div className="bar"><i style=${{ width: scan.p * 100 + '%' }}></i></div>` : null}
+        <div className="row" style=${{ justifyContent: 'center' }}>
+          <button className="btn glow" onClick=${() => fileRef.current.click()}>${photo ? 'Change Photo' : 'Upload Photo'}</button>
+          <button className="btn glow" disabled=${!photo || scan.on} onClick=${analyze}>${scan.on ? 'Analyzing…' : 'Analyze Machine'}</button>
         </div>
-      </aside>
-    </div>
+        <div className="note">${photo ? photo.name + ' · ' : ''}The photo stays in your browser. The report comes from the built-in library for the selected machine.</div>
+      </div>
+
+      ${tstep ? html`<div className="card tourcard">
+        <div className="eyebrow amber">Guided tour · Step ${tour + 1} of ${cfg.tour.length}</div>
+        <h2>${tstep.title}</h2><p>${tstep.text}</p>
+        <div className="dots">${cfg.tour.map((_, i) => html`<i key=${i} className=${i <= tour ? 'd' : ''}></i>`)}</div>
+        <div className="row">
+          <button className="btn" disabled=${tour === 0} onClick=${() => setTour(Math.max(0, tour - 1))}>← Previous</button>
+          <button className="btn amber" onClick=${() => tour < cfg.tour.length - 1 ? setTour(tour + 1) : setTour(null)}>${tour < cfg.tour.length - 1 ? 'Next →' : 'Finish'}</button>
+        </div>
+      </div>` : null}
+
+      ${fl ? html`<div className="card faultcard">
+        <div className="eyebrow red">Fault diagnostics</div>
+        <h2>${fl.name}</h2>
+        <p>Affected part: <b>${cfg.parts[fl.part].name}</b></p>
+        <h3>Symptoms</h3><ul className="sym">${fl.symptoms.map((s, i) => html`<li key=${i}>${s}</li>`)}</ul>
+        <h3>Repair steps</h3><ol className="steps">${fl.repair.map((s, i) => html`<li key=${i}>${s}</li>`)}</ol>
+      </div>` : null}
+
+      <div className="segs" role="tablist" aria-label="Machine report">
+        ${TABS.map(([id, label]) => html`<button key=${id} role="tab" className="seg" aria-selected=${tab === id} onClick=${() => setTab(id)}>${label}</button>`)}
+      </div>
+
+      ${tab === 'inspect' ? (part ? html`<div className="card" key=${key}>
+        <div className="eyebrow">${part.cat}</div><h2>${part.name}</h2>
+        <h3>Operating principle</h3><p>${part.principle}</p>
+        <h3>Engineering function</h3><p>${part.fn}</p>
+        <h3>Key specifications</h3>
+        <table className="specs"><tbody>${part.specs.map((r, i) => html`<tr key=${i}><td>${r[0]}</td><td>${r[1]}</td></tr>`)}</tbody></table>
+      </div>` : html`<div className="card" key=${key}>
+        <div className="eyebrow">Part inspector</div><h2>Select a part</h2>
+        <p>Click a part in the 3D view, a floating tag, or a card in the Parts tab. The camera flies to it and its principle, function and specifications appear here.</p>
+      </div>`) : null}
+
+      ${tab === 'parts' ? html`<div className="stack" key=${key}>
+        <${Enter} i=${0}><div className="sub">${pk.length} parts · tap one to fly to it</div><//>
+        ${pk.map(([id, p], i) => html`<${Enter} key=${id} i=${i + 1}>
+          <button className=${'pcard' + (sel === id ? ' on' : '')} onClick=${() => pickFromList(id)}>
+            <span className="pidx">${i + 1}</span>
+            <span className="ptxt"><b>${p.name}</b><small>${p.cat}</small>${sel === id ? html`<em>${p.fn}</em>` : null}</span>
+          </button><//>`)}
+      </div>` : null}
+
+      ${tab === 'dos' ? html`<div className="stack" key=${key}>
+        <${Enter} i=${0}><div className="sub">Do</div><//>
+        ${g.dos.map((t, i) => html`<${Enter} key=${'d' + i} i=${i + 1}><div className="note-card do"><span className="ico">✓</span><span>${t}</span></div><//>`)}
+        <${Enter} i=${g.dos.length + 1}><div className="sub">Don't</div><//>
+        ${g.donts.map((t, i) => html`<${Enter} key=${'n' + i} i=${g.dos.length + 2 + i}><div className="note-card dont"><span className="ico">✕</span><span>${t}</span></div><//>`)}
+      </div>` : null}
+
+      ${tab === 'care' ? html`<div className="stack" key=${key}>
+        <${Enter} i=${0}><div className="sub">Care and maintenance schedule</div><//>
+        ${g.care.map((c, i) => html`<${Enter} key=${i} i=${i + 1}><div className="care-card"><span className="every">${c.every}</span><b>${c.title}</b><p>${c.text}</p></div><//>`)}
+      </div>` : null}
+    </aside>
   </div>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
 
 </script>
-
-</body></html>
+</body>
+</html>
